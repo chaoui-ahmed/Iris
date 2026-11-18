@@ -63,6 +63,14 @@ python train_enhancer.py --data data/macro --epochs 40
 
 `data/macro/` = a few hundred to a few thousand sharp iris macro photos you have the rights to (own shots with a clip-on macro lens, licensed or free-licence stock). No phone versions needed: the script degrades each photo to look like a phone shot and learns to undo it. Don't use photos scraped from iris-photography studios: they're copyrighted, and they're photos of real people's eyes.
 
+## 3. Texture library (what makes the render look real)
+
+```bash
+python build_library.py --n 80 --out ../lib/iris
+```
+
+Downloads irises from the Synthetic Iris Image Dataset (diffusion-generated from DSLR photos, nobody's real eye), unwraps each into a 1024x160 strip and writes `lib/iris/NNN.jpg` + `index.json` (colours per ring, used to pick the closest texture to the user's eye). More textures = more variety; each is about 20 KB.
+
 ## Files
 
 - `synth_eyes.py`: procedural eye images + masks (incl. images with no eye, so the model learns to say "nothing here")
@@ -70,6 +78,7 @@ python train_enhancer.py --data data/macro --epochs 40
 - `train.py`: training + ONNX export
 - `predict.py`: same detection logic as the site, on a folder of photos, with overlays
 - `train_enhancer.py`: detail enhancer, degradation pipeline, export
+- `build_library.py`: builds the iris texture library used by the renderer
 - `train_colab.ipynb`: all of the above on Colab
 
 ## Privacy
