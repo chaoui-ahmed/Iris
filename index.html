@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Iris — your eye, up close</title>
+<meta name="description" content="Scan your eye and get a detailed macro picture of your iris. Runs entirely on your phone.">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta property="og:title" content="Iris">
+<meta property="og:description" content="Your eye, up close.">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-512.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500&display=swap" rel="stylesheet">
+<style>
+  :root{--black:#000;--white:#F2F2F2;--grey:#8A8A8F;--dim:#5D5D63;--line:#2A2A2E}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;background:var(--black);color:var(--white);font-family:Inter,system-ui,sans-serif;font-weight:300;-webkit-font-smoothing:antialiased}
+  #app{position:relative;min-height:100vh;min-height:100dvh;overflow:hidden}
+  a{color:var(--grey)}
+
+  .screen{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;
+    padding:calc(56px + env(safe-area-inset-top)) 24px calc(40px + env(safe-area-inset-bottom));
+    opacity:0;pointer-events:none;transition:opacity 600ms ease}
+  .screen.on{opacity:1;pointer-events:auto}
+  .top{width:100%;max-width:440px;display:flex;align-items:center;justify-content:space-between;min-height:20px}
+  .wm{font-size:13px;letter-spacing:.32em;margin-right:-.32em}
+  .top .side{width:48px;font-size:12.5px}
+  .mid{flex-grow:1;width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:48px}
+  .actions{width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;gap:16px}
+  h1{font-size:34px;line-height:42px;font-weight:300;letter-spacing:-.01em;text-align:center}
+  .body2{font-size:15px;line-height:24px;color:var(--grey);text-align:center}
+  .hint{font-size:12.5px;line-height:20px;color:var(--dim);text-align:center;max-width:300px}
+
+  .btn{height:52px;width:100%;border-radius:999px;display:flex;align-items:center;justify-content:center;font:500 15px Inter,system-ui,sans-serif;
+    letter-spacing:.01em;cursor:pointer;border:0;text-decoration:none;-webkit-tap-highlight-color:transparent;
+    transition:transform 160ms cubic-bezier(.2,.7,.3,1),background-color 160ms ease,opacity 160ms ease}
+  .btn:active{transform:scale(.97)}
+  .btn-primary{background:var(--white);color:var(--black)}
+  .btn-primary:active{background:rgba(242,242,242,.86)}
+  .btn-secondary{background:transparent;color:var(--white);border:1px solid var(--line)}
+  .btn-secondary:active,.btn-secondary:hover{background:rgba(242,242,242,.08)}
+  .btn:focus-visible{outline:1px solid rgba(242,242,242,.6);outline-offset:4px}
+  .btn[disabled]{opacity:.32;pointer-events:none}
+  .tlink{background:none;border:0;font:300 12.5px Inter,system-ui,sans-serif;color:var(--grey);cursor:pointer;padding:8px 4px;
+    text-decoration:underline;text-decoration-thickness:1px;text-underline-offset:4px;text-decoration-color:rgba(138,138,143,.45);
+    transition:color 200ms ease,text-decoration-color 200ms ease}
+  .tlink:hover{color:var(--white);text-decoration-color:rgba(242,242,242,.6)}
+  .links{display:flex;align-items:center;gap:16px;padding-top:4px}
+  .sep{width:1px;height:12px;background:var(--line)}
+
+  /* loader */
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes spinr{to{transform:rotate(-360deg)}}
+  .loader{position:relative;width:280px;height:280px}
+  .loader .crop{position:absolute;left:40px;top:40px;width:200px;height:200px;border-radius:50%;overflow:hidden}
+  .loader .crop img{width:100%;height:100%;object-fit:cover;display:block;filter:blur(12px) grayscale(1) brightness(.7);transform:translate(22px,-16px) scale(1.35)}
+  .loader svg{position:absolute;inset:0}
+  .ring-a{animation:spin 6s linear infinite}
+  .ring-b{animation:spinr 10s linear infinite}
+
+  /* result */
+  .frame{width:min(360px,86vw);aspect-ratio:1;position:relative}
+  .frame img{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;opacity:0}
+  @keyframes reveal{from{opacity:0;filter:blur(24px);transform:translate(-36px,24px) scale(1.12)}to{opacity:1;filter:blur(0);transform:none}}
+  .reveal{animation:reveal 1200ms cubic-bezier(.16,1,.3,1) 200ms both}
+  @keyframes mergeL{0%{opacity:1;transform:translateX(-96px) scale(.5)}70%{opacity:1;filter:blur(0)}100%{opacity:0;transform:none scale(.92);filter:blur(16px)}}
+  @keyframes mergeR{0%{opacity:1;transform:translateX(96px) scale(.5)}70%{opacity:1;filter:blur(0)}100%{opacity:0;transform:none scale(.92);filter:blur(16px)}}
+  @keyframes fuseIn{from{opacity:0;filter:blur(24px);transform:scale(.96)}to{opacity:1;filter:blur(0);transform:none}}
+  .frame img.src{border-radius:50%}
+  .merge-l{animation:mergeL 1100ms cubic-bezier(.45,0,.25,1) 300ms both}
+  .merge-r{animation:mergeR 1100ms cubic-bezier(.45,0,.25,1) 300ms both}
+  .fuse-in{animation:fuseIn 1200ms cubic-bezier(.16,1,.3,1) 1000ms both}
+
+  /* fuse */
+  .pair{display:flex;align-items:center}
+  .thumb{width:156px;height:156px;border-radius:50%;overflow:hidden;position:relative;z-index:1;background:#000}
+  .thumb img{width:100%;height:100%;object-fit:cover;transform:scale(1.2);display:block}
+  .slot{width:156px;height:156px;margin-left:-28px;border-radius:50%;border:1px dashed var(--dim);display:flex;align-items:center;justify-content:center}
+
+  /* adjust */
+  #adj{width:100%;height:auto;border-radius:16px;touch-action:none;cursor:grab;background:#0a0a0a;display:block}
+  .field{width:100%;display:flex;flex-direction:column;gap:8px}
+  .field .lab{font-size:12.5px;color:var(--grey)}
+  .rng-wrap{position:relative;height:18px}
+  .rng-wrap .track{position:absolute;left:0;right:0;top:8.5px;height:1px;background:var(--line)}
+  .rng-wrap .fill{position:absolute;left:0;top:8.5px;height:1px;background:rgba(242,242,242,.6)}
+  .rng{-webkit-appearance:none;appearance:none;position:absolute;inset:0;width:100%;height:18px;margin:0;background:transparent;cursor:pointer}
+  .rng:focus{outline:none}
+  .rng::-webkit-slider-runnable-track{height:18px;background:transparent}
+  .rng::-moz-range-track{height:1px;background:transparent}
+  .rng::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;border-radius:50%;background:var(--white);border:0;transition:transform 160ms ease}
+  .rng::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--white);border:0}
+  .rng:active::-webkit-slider-thumb{transform:scale(.9)}
+
+  @media (prefers-reduced-motion:reduce){*{animation-duration:1ms!important;transition-duration:1ms!important}}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- Home -->
+  <section id="home" class="screen on">
+    <div class="top" style="justify-content:center"><span class="wm">IRIS</span></div>
+    <div class="mid">
+      <svg width="120" height="120" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22.5" fill="none" stroke="#2A2A2E" stroke-width="1" vector-effect="non-scaling-stroke"/><circle cx="24" cy="24" r="15" fill="none" stroke="#2A2A2E" stroke-width="1" vector-effect="non-scaling-stroke"/><circle cx="24" cy="24" r="7.5" fill="none" stroke="#5D5D63" stroke-width="1" vector-effect="non-scaling-stroke"/><circle cx="24" cy="24" r="2.6" fill="#F2F2F2"/></svg>
+      <h1>Your eye,<br>up close.</h1>
+    </div>
+    <div class="actions" style="gap:24px">
+      <label class="btn btn-primary">Scan your eye<input type="file" accept="image/*" data-slot="0" class="fileIn" hidden></label>
+      <span class="hint">Use the back camera, about 10 cm from your eye. Soft light works best.</span>
+      <button class="tlink" id="sample">Try a sample</button>
+    </div>
+  </section>
+
+  <!-- Scanning -->
+  <section id="scan" class="screen">
+    <div class="top" style="justify-content:center"><span class="wm">IRIS</span></div>
+    <div class="mid">
+      <div class="loader">
+        <div class="crop"><img id="cropImg" alt=""></div>
+        <svg class="ring-a" width="280" height="280" viewBox="0 0 280 280" aria-hidden="true"><circle cx="140" cy="140" r="139.5" fill="none" stroke="#2A2A2E" stroke-width="1"/><circle cx="140" cy="140" r="139.5" fill="none" stroke="#F2F2F2" stroke-width="1" pathLength="100" stroke-dasharray="22 78" stroke-linecap="round"/></svg>
+        <svg class="ring-b" width="280" height="280" viewBox="0 0 280 280" aria-hidden="true"><circle cx="140" cy="140" r="118" fill="none" stroke="#2A2A2E" stroke-width="1"/><circle cx="140" cy="140" r="118" fill="none" stroke="rgba(242,242,242,0.6)" stroke-width="1" pathLength="100" stroke-dasharray="48 52" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+    <div class="actions"><button class="tlink" id="cancel">Cancel</button></div>
+  </section>
+
+  <!-- Result -->
+  <section id="result" class="screen">
+    <div class="top" style="justify-content:center"><span class="wm">IRIS</span></div>
+    <div class="mid"><div class="frame"><img id="resImg" alt="Your iris, rendered up close"></div></div>
+    <div class="actions">
+      <button class="btn btn-primary" id="save">Save</button>
+      <label class="btn btn-secondary">New scan<input type="file" accept="image/*" data-slot="0" class="fileIn" hidden></label>
+      <div class="links">
+        <button class="tlink" id="toFuse">Fuse with another eye</button>
+        <span class="sep"></span>
+        <button class="tlink" data-adjust="0">Adjust</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Fuse -->
+  <section id="fuse" class="screen">
+    <div class="top">
+      <button class="tlink side" id="fuseBack" style="text-align:left;padding-left:0">Back</button>
+      <span class="wm">IRIS</span><span class="side"></span>
+    </div>
+    <div class="mid" style="gap:56px">
+      <div class="pair">
+        <div class="thumb"><img id="thumbA" alt="Your first eye"></div>
+        <div class="slot"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M10 3v14M3 10h14" stroke="#8A8A8F" stroke-width="1" fill="none"/></svg></div>
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:16px">
+        <h1>Two eyes,<br>one picture.</h1>
+        <span class="body2">Add a second eye, a friend's or your other one.</span>
+      </div>
+    </div>
+    <div class="actions">
+      <label class="btn btn-primary">Scan second eye<input type="file" accept="image/*" data-slot="1" class="fileIn" hidden></label>
+      <span class="hint">Same as before. Back camera, about 10 cm away.</span>
+    </div>
+  </section>
+
+  <!-- Fusion result -->
+  <section id="fusion" class="screen">
+    <div class="top" style="justify-content:center"><span class="wm">IRIS</span></div>
+    <div class="mid">
+      <div class="frame">
+        <img id="fA" class="src" alt="">
+        <img id="fB" class="src" alt="">
+        <img id="fF" alt="Two irises fused into one">
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="saveF">Save</button>
+      <button class="btn btn-secondary" id="change2">Change second eye</button>
+      <div class="links">
+        <button class="tlink" id="swap">Swap sides</button>
+        <span class="sep"></span>
+        <button class="tlink" data-adjust="1">Adjust</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Adjust (fallback) -->
+  <section id="adjustS" class="screen">
+    <div class="top">
+      <button class="tlink side" id="adjBack" style="text-align:left;padding-left:0">Back</button>
+      <span class="wm">IRIS</span><span class="side"></span>
+    </div>
+    <div class="mid" style="gap:32px">
+      <span class="body2">Drag the circle onto your iris.</span>
+      <canvas id="adj" width="880" height="880"></canvas>
+      <div class="field">
+        <span class="lab">Size</span>
+        <div class="rng-wrap"><div class="track"></div><div class="fill" id="fR"></div><input class="rng" type="range" id="aR" min="5" max="100"></div>
+      </div>
+      <div class="field">
+        <span class="lab">Pupil</span>
+        <div class="rng-wrap"><div class="track"></div><div class="fill" id="fP"></div><input class="rng" type="range" id="aP" min="15" max="70"></div>
+      </div>
+    </div>
+    <div class="actions"><button class="btn btn-primary" id="done">Done</button></div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+const $=id=>document.getElementById(id);
+const S=1024, MIN_SCAN_MS=1800;
+const out=document.createElement("canvas"); out.width=out.height=S;
+const octx=out.getContext("2d");
+
+// working state used by detect() and the adjust screen
+let img=null, srcCanvas=null, cx=0, cy=0, R=0, pr=0.36, imgSeed=0;
+// scans[0] = first eye, scans[1] = second eye (fusion)
+const scans=[null,null];
+let fused=null, swapSides=false, job=0, backTo="home", adjustSlot=0;
+
+const clamp=(x,a,b)=>x<a?a:x>b?b:x;
+const lumOf=(r,g,b)=>0.2126*r+0.7152*g+0.0722*b;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+
+function show(id){document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id===id));}
+function replayAnim(el,cls){el.classList.remove(cls); void el.offsetWidth; el.classList.add(cls);}
+
+/* ---------- image in ---------- */
+function setImage(c){
+  const k=Math.min(1,1400/Math.max(c.width,c.height));
+  srcCanvas=document.createElement("canvas");
+  srcCanvas.width=Math.round(c.width*k); srcCanvas.height=Math.round(c.height*k);
+  const g=srcCanvas.getContext("2d",{willReadFrequently:true});
+  g.drawImage(c,0,0,srcCanvas.width,srcCanvas.height);
+  const d=g.getImageData(0,0,srcCanvas.width,srcCanvas.height);
+  img={w:d.width,h:d.height,data:d.data};
+  let hs=7; for(let i=0;i<d.data.length;i+=997) hs=(Math.imul(hs,31)+d.data[i])|0;
+  imgSeed=hs;
+}
+const snapshot=()=>({src:srcCanvas,img,cx,cy,R,pr,seed:imgSeed,blob:null,url:null});
+function load(s){srcCanvas=s.src; img=s.img; cx=s.cx; cy=s.cy; R=s.R; pr=s.pr; imgSeed=s.seed;}
+
+/* ---------- automatic iris + pupil detection (integro-differential search) ---------- */
+function detect(){
+  const k=Math.min(1,320/Math.max(img.w,img.h));
+  const w=Math.max(16,Math.round(img.w*k)), h=Math.max(16,Math.round(img.h*k));
+  const c=document.createElement("canvas"); c.width=w; c.height=h;
+  const g=c.getContext("2d",{willReadFrequently:true}); g.drawImage(srcCanvas,0,0,w,h);
+  const d=g.getImageData(0,0,w,h).data, L=new Float32Array(w*h);
+  for(let i=0;i<w*h;i++) L[i]=lumOf(d[i*4],d[i*4+1],d[i*4+2])/255;
+  const blur=(A,r)=>{
+    const T=new Float32Array(w*h), B=new Float32Array(w*h);
+    for(let y=0;y<h;y++) for(let x=0;x<w;x++){let s=0,n=0; for(let q=Math.max(0,x-r);q<=Math.min(w-1,x+r);q++){s+=A[y*w+q];n++;} T[y*w+x]=s/n;}
+    for(let x=0;x<w;x++) for(let y=0;y<h;y++){let s=0,n=0; for(let q=Math.max(0,y-r);q<=Math.min(h-1,y+r);q++){s+=T[q*w+x];n++;} B[y*w+x]=s/n;}
+    return B;
+  };
+  const L1=blur(L,1), Lb=blur(L,Math.max(3,Math.round(Math.max(w,h)*0.05)));
+  const md=Math.min(w,h);
+  // darkest large blob, biased to the frame centre
+  let best=1e9, bx=w/2, by=h/2;
+  for(let y=Math.round(h*.1);y<h*.9;y++) for(let x=Math.round(w*.1);x<w*.9;x++){
+    const dn=((x-w/2)/w)**2+((y-h/2)/h)**2, s=Lb[y*w+x]+0.8*dn;
+    if(s<best){best=s;bx=x;by=y;}
+  }
+  const at=(x,y)=>L1[clamp(Math.round(y),0,h-1)*w+clamp(Math.round(x),0,w-1)];
+  const mkAngles=(full)=>{const A=[]; const n=36;
+    for(let i=0;i<n;i++){ let a; if(full) a=i/n*2*Math.PI; else {const side=i<n/2?0:Math.PI; a=side+((i%(n/2))/(n/2-1)-0.5)*1.5;} A.push([Math.cos(a),Math.sin(a)]);}
+    return A;};
+  const side=mkAngles(false), full=mkAngles(true);
+  function search(x0,y0,span,step,rmin,rmax,A){
+    let bs=-1e9, res={x:x0,y:y0,r:Math.round((rmin+rmax)/2),s:0};
+    if(rmax<=rmin+2) return res;
+    // per-ray edge strength is clipped so one bright spot (a reflection) can't win: a real circle wins by consistency
+    const Q=new Float32Array(rmax+3), acc=new Float32Array(rmax+3);
+    for(let dy=-span;dy<=span;dy+=step) for(let dx=-span;dx<=span;dx+=step){
+      const x=x0+dx, y=y0+dy; acc.fill(0);
+      for(const [ca,sa] of A){
+        for(let r=Math.max(0,rmin-2);r<=rmax+2;r++) Q[r]=at(x+ca*r,y+sa*r);
+        for(let r=Math.max(2,rmin);r<=rmax;r++){const v=Q[r+2]-Q[r-2]; acc[r]+=v>0.07?0.07:v<-0.07?-0.07:v;}
+      }
+      for(let r=Math.max(2,rmin);r<=rmax;r++){const v=acc[r]/A.length; if(v>bs){bs=v;res={x,y,r,s:v};}}
+    }
+    return res;
+  }
+  // iris: strongest dark->bright circular edge, measured on the left/right sides (lids cover top & bottom)
+  let I=search(bx,by,Math.round(md*.14),3,Math.round(md*.08),Math.round(md*.5),side);
+  I=search(I.x,I.y,3,1,Math.round(I.r*.8),Math.round(Math.min(md*.55,I.r*1.2)),side);
+  // if that was actually the pupil, there is a second strong ring further out: take it
+  const O=search(I.x,I.y,Math.max(2,Math.round(I.r*.12)),1,Math.round(I.r*1.5),Math.round(Math.min(md*.6,I.r*4)),side);
+  if(O.s>0.6*I.s) I=O;
+  // pupil: inside the iris, near its centre
+  const P=search(I.x,I.y,Math.max(2,Math.round(I.r*.15)),1,Math.round(I.r*.15),Math.round(I.r*.68),full);
+  let ratio=P.s>0.012?clamp(P.r/I.r,0.18,0.68):0.36;
+  const kx=img.w/w, ky=img.h/h;
+  cx=I.x*kx; cy=I.y*ky; R=I.r*(kx+ky)/2; pr=ratio;
+}
+
+
+
+/* ---------- render (parallel Web Workers) ---------- */
+const NW=Math.max(2,Math.min(8,(navigator.hardwareConcurrency||4)));
+const workers=Array.from({length:NW},()=>new Worker("render-worker.js"));
+const eye=s=>({img:s.img,cx:s.cx,cy:s.cy,R:s.R,pr:s.pr});
+function render(spec){
+  const my=++job;
+  return new Promise((resolve,reject)=>{
+    const id=octx.createImageData(S,S), D=id.data;
+    let left=NW;
+    workers.forEach((wk,k)=>{
+      wk.onmessage=e=>{
+        if(e.data.id!==my) return;
+        const {start,step,band}=e.data;
+        for(let y=start,row=0;y<S;y+=step,row++) D.set(band.subarray(row*S*4,(row+1)*S*4),y*S*4);
+        if(--left===0){
+          if(my!==job) return reject("cancelled");
+          octx.putImageData(id,0,0);
+          out.toBlob(b=>resolve({blob:b,url:URL.createObjectURL(b)}),"image/jpeg",0.93);
+        }
+      };
+      wk.postMessage(Object.assign({id:my,S,start:k,step:NW},spec));
+    });
+  });
+}
+const renderEye=s=>render({A:eye(s),seed:s.seed});
+const renderFusion=()=>render({A:eye(scans[0]),B:eye(scans[1]),swap:swapSides,seed:scans[0].seed^scans[1].seed});
+
+/* ---------- scanning screen ---------- */
+function showScanning(s){
+  const c=document.createElement("canvas"); c.width=c.height=400;
+  const side=s.R*2.6;
+  c.getContext("2d").drawImage(s.src,s.cx-side/2,s.cy-side/2,side,side,0,0,400,400);
+  $("cropImg").src=c.toDataURL("image/jpeg",0.7);
+  show("scan");
+}
+$("cancel").addEventListener("click",()=>{job++; show(backTo);});
+
+function buzz(){try{navigator.vibrate&&navigator.vibrate(18);}catch(e){}}
+
+async function runSingle(){
+  const s=scans[0]; backTo="home";
+  showScanning(s);
+  const t0=performance.now();
+  try{
+    const r=await renderEye(s);
+    s.blob=r.blob; s.url=r.url;
+    await sleep(Math.max(0,MIN_SCAN_MS-(performance.now()-t0)));
+    if(!$("scan").classList.contains("on")) return;
+    const im=$("resImg"); im.classList.remove("reveal"); im.style.opacity=0;
+    await new Promise(res=>{im.onload=res; im.src=s.url;});
+    im.style.opacity="";
+    show("result"); replayAnim(im,"reveal"); buzz();
+  }catch(e){}
+}
+
+async function runFusion(rescan){
+  backTo="fuse";
+  const t0=performance.now();
+  try{
+    if(rescan){
+      showScanning(scans[1]);
+      const r=await renderEye(scans[1]); scans[1].blob=r.blob; scans[1].url=r.url;
+    }
+    fused=await renderFusion();
+    if(rescan){
+      await sleep(Math.max(0,MIN_SCAN_MS-(performance.now()-t0)));
+      if(!$("scan").classList.contains("on")) return;
+    }
+    playFusion();
+  }catch(e){}
+}
+function playFusion(){
+  const a=$("fA"), b=$("fB"), f=$("fF");
+  const [L,Rr]=swapSides?[scans[1],scans[0]]:[scans[0],scans[1]];
+  let n=0; const ready=()=>{ if(++n<3) return;
+    show("fusion"); replayAnim(a,"merge-l"); replayAnim(b,"merge-r"); replayAnim(f,"fuse-in"); setTimeout(buzz,1000); };
+  [a,b,f].forEach(el=>{el.className=el.id==="fF"?"":"src"; el.onload=ready;});
+  a.src=L.url; b.src=Rr.url; f.src=fused.url;
+}
+
+/* ---------- inputs ---------- */
+function decode(file){
+  return new Promise((res,rej)=>{
+    const url=URL.createObjectURL(file), im=new Image();
+    im.onload=()=>{const c=document.createElement("canvas"); c.width=im.naturalWidth; c.height=im.naturalHeight;
+      c.getContext("2d").drawImage(im,0,0); URL.revokeObjectURL(url); res(c);};
+    im.onerror=rej; im.src=url;
+  });
+}
+document.querySelectorAll(".fileIn").forEach(inp=>inp.addEventListener("change",async e=>{
+  const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
+  const slot=+inp.dataset.slot;
+  try{
+    setImage(await decode(f)); detect(); scans[slot]=snapshot();
+    if(slot===0){ scans[1]=null; swapSides=false; runSingle(); } else runFusion(true);
+  }catch(err){}
+}));
+
+/* ---------- sample eye ---------- */
+function makeSample(ox,oy,sc){
+  ox=ox||0; oy=oy||0; sc=sc||1;
+  const c=document.createElement("canvas"); c.width=900; c.height=600; const g=c.getContext("2d");
+  const sk=g.createLinearGradient(0,0,0,600); sk.addColorStop(0,"#b98a6e"); sk.addColorStop(1,"#a2735a");
+  g.fillStyle=sk; g.fillRect(0,0,900,600);
+  g.translate(450+ox,300+oy); g.scale(sc,sc); g.translate(-450,-300);
+  g.save(); g.beginPath(); g.moveTo(170,300); g.quadraticCurveTo(450,90,730,300); g.quadraticCurveTo(450,480,170,300); g.closePath(); g.clip();
+  const scl=g.createRadialGradient(450,300,40,450,300,330); scl.addColorStop(0,"#f3ece6"); scl.addColorStop(1,"#c9a99a");
+  g.fillStyle=scl; g.fillRect(0,0,900,600);
+  const ir=g.createRadialGradient(450,300,30,450,300,125);
+  ir.addColorStop(0,"#7a4a1c"); ir.addColorStop(.33,"#8f6a2c"); ir.addColorStop(.5,"#6f7d4a"); ir.addColorStop(.85,"#566b55"); ir.addColorStop(1,"#2b3a35");
+  g.fillStyle=ir; g.beginPath(); g.arc(450,300,122,0,7); g.fill();
+  g.globalAlpha=.12; g.strokeStyle="#e6d7a0"; g.lineWidth=2;
+  let s=12345; const rnd=()=>((s=Math.imul(s,1103515245)+12345)>>>0)/4294967296;
+  for(let i=0;i<140;i++){const a=rnd()*6.283, r1=45+rnd()*20, r2=80+rnd()*40;
+    g.beginPath(); g.moveTo(450+Math.cos(a)*r1,300+Math.sin(a)*r1); g.lineTo(450+Math.cos(a)*r2,300+Math.sin(a)*r2); g.stroke();}
+  g.globalAlpha=1; g.fillStyle="#0a0807"; g.beginPath(); g.arc(450,300,42,0,7); g.fill();
+  const lid=g.createLinearGradient(0,150,0,260); lid.addColorStop(0,"rgba(40,20,10,.55)"); lid.addColorStop(1,"rgba(40,20,10,0)");
+  g.fillStyle=lid; g.fillRect(0,0,900,600);
+  g.fillStyle="rgba(255,255,255,.9)"; g.beginPath(); g.ellipse(415,262,13,10,0,0,7); g.fill();
+  g.restore();
+  const b=document.createElement("canvas"); b.width=900; b.height=600; const bg=b.getContext("2d");
+  bg.filter="blur(2.2px)"; bg.drawImage(c,0,0);
+  return b;
+}
+
+$("sample").addEventListener("click",()=>{setImage(makeSample()); detect(); scans[0]=snapshot(); scans[1]=null; runSingle();});
+
+$("toFuse").addEventListener("click",()=>{$("thumbA").src=scans[0].url; show("fuse");});
+$("fuseBack").addEventListener("click",()=>show("result"));
+$("change2").addEventListener("click",()=>{$("thumbA").src=scans[0].url; show("fuse");});
+$("swap").addEventListener("click",async()=>{swapSides=!swapSides; try{fused=await renderFusion(); playFusion();}catch(e){}});
+
+/* ---------- share card (9:16 story) ---------- */
+function spaced(g,text,x,y,track){
+  // letter-spaced text centred on x (canvas letterSpacing isn't everywhere yet)
+  const chars=[...text], ws=chars.map(c=>g.measureText(c).width);
+  const total=ws.reduce((a,b)=>a+b,0)+track*(chars.length-1);
+  let px=x-total/2; g.textAlign="left";
+  chars.forEach((c,i)=>{g.fillText(c,px,y); px+=ws[i]+track;});
+}
+function loadImg(url){return new Promise(r=>{const i=new Image(); i.onload=()=>r(i); i.src=url;});}
+async function makeCard(mainUrl,caption,sources){
+  try{await Promise.all([document.fonts.load("300 36px Inter"),document.fonts.load("300 30px Inter")]);}catch(e){}
+  const W=1080,H=1920, c=document.createElement("canvas"); c.width=W; c.height=H;
+  const g=c.getContext("2d"); g.fillStyle="#000"; g.fillRect(0,0,W,H);
+  const main=await loadImg(mainUrl);
+  // bottom group, from the bottom up: wordmark, caption, optional source eyes
+  const wmY=H-150-8, capY=wmY-36-72, srcTop=capY-36-64-120;
+  const top=sources?220:260, bottom=sources?srcTop-64:capY-48;
+  const cyM=(top+bottom)/2;
+  g.drawImage(main,(W-920)/2,cyM-460,920,920);
+  g.fillStyle="#F2F2F2"; g.font="300 30px Inter, system-ui, sans-serif"; g.textBaseline="alphabetic";
+  spaced(g,"IRIS",W/2,wmY,30*0.32);
+  g.fillStyle="#8A8A8F"; g.font="300 36px Inter, system-ui, sans-serif"; g.textAlign="center";
+  g.fillText(caption,W/2,capY);
+  if(sources){
+    const ims=await Promise.all(sources.map(loadImg));
+    const xs=[W/2-60-32-14-60, W/2+14+32+60];
+    ims.forEach((im,i)=>{g.save(); g.beginPath(); g.arc(xs[i],srcTop+60,60,0,Math.PI*2); g.clip();
+      g.drawImage(im,xs[i]-72,srcTop+60-72,144,144); g.restore();});
+    g.strokeStyle="#5D5D63"; g.lineWidth=1.4; g.beginPath();
+    g.moveTo(W/2-14,srcTop+60); g.lineTo(W/2+14,srcTop+60); g.moveTo(W/2,srcTop+46); g.lineTo(W/2,srcTop+74); g.stroke();
+  }
+  return new Promise(r=>c.toBlob(r,"image/jpeg",0.93));
+}
+async function share(blob,name){
+  const file=new File([blob],name,{type:"image/jpeg"});
+  try{ if(navigator.canShare&&navigator.canShare({files:[file]})){ await navigator.share({files:[file]}); return; } }
+  catch(e){ if(e&&e.name==="AbortError") return; }
+  const url=URL.createObjectURL(blob), a=document.createElement("a");
+  a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+async function withBusy(btn,fn){btn.disabled=true; try{await fn();}finally{btn.disabled=false;}}
+$("save").addEventListener("click",e=>withBusy(e.currentTarget,async()=>share(await makeCard(scans[0].url,"my eye, up close."),"iris.jpg")));
+$("saveF").addEventListener("click",e=>withBusy(e.currentTarget,async()=>{
+  const [L,Rr]=swapSides?[scans[1],scans[0]]:[scans[0],scans[1]];
+  share(await makeCard(fused.url,"two eyes, one picture.",[L.url,Rr.url]),"iris-fusion.jpg");
+}));
+
+/* ---------- adjust (fallback when detection misses) ---------- */
+const adj=$("adj"), actx=adj.getContext("2d");
+let view={s:1,ox:0,oy:0};
+function drawAdj(){
+  const W=adj.width, H=adj.height, s=Math.min(W/img.w,H/img.h);
+  view={s,ox:(W-img.w*s)/2,oy:(H-img.h*s)/2};
+  actx.fillStyle="#0a0a0a"; actx.fillRect(0,0,W,H);
+  actx.drawImage(srcCanvas,view.ox,view.oy,img.w*s,img.h*s);
+  const X=view.ox+cx*s, Y=view.oy+cy*s;
+  actx.lineWidth=2; actx.strokeStyle="rgba(242,242,242,.95)";
+  actx.beginPath(); actx.arc(X,Y,R*s,0,7); actx.stroke();
+  actx.strokeStyle="rgba(242,242,242,.45)";
+  actx.beginPath(); actx.arc(X,Y,R*pr*s,0,7); actx.stroke();
+}
+const maxR=()=>Math.min(img.w,img.h)*0.6;
+function fills(){
+  const r=$("aR"), p=$("aP");
+  $("fR").style.width=((r.value-r.min)/(r.max-r.min)*100)+"%";
+  $("fP").style.width=((p.value-p.min)/(p.max-p.min)*100)+"%";
+}
+document.querySelectorAll("[data-adjust]").forEach(b=>b.addEventListener("click",()=>{
+  adjustSlot=+b.dataset.adjust; load(scans[adjustSlot]);
+  adj.width=880; adj.height=Math.round(880*Math.min(1.1,img.h/img.w));
+  $("aR").value=Math.round(R/maxR()*100); $("aP").value=Math.round(pr*100);
+  fills(); drawAdj(); show("adjustS");
+}));
+$("adjBack").addEventListener("click",()=>show(adjustSlot===0?"result":"fusion"));
+let drag=false;
+function pt(e){const rc=adj.getBoundingClientRect();
+  const X=(e.clientX-rc.left)/rc.width*adj.width, Y=(e.clientY-rc.top)/rc.height*adj.height;
+  cx=clamp((X-view.ox)/view.s,0,img.w); cy=clamp((Y-view.oy)/view.s,0,img.h); drawAdj();}
+adj.addEventListener("pointerdown",e=>{drag=true; adj.setPointerCapture(e.pointerId); pt(e);});
+adj.addEventListener("pointermove",e=>{if(drag) pt(e);});
+adj.addEventListener("pointerup",()=>drag=false);
+$("aR").addEventListener("input",()=>{R=Math.max(4,+$("aR").value/100*maxR()); fills(); drawAdj();});
+$("aP").addEventListener("input",()=>{pr=+$("aP").value/100; fills(); drawAdj();});
+$("done").addEventListener("click",()=>{
+  scans[adjustSlot]=snapshot();
+  if(adjustSlot===0){ runSingle(); } else runFusion(true);
+});
+
+window.__iris={setImage,detect,makeSample,get:()=>({cx,cy,R,pr})};
+})();
+</script>
+</body>
+</html>
