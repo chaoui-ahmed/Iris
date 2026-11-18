@@ -1,0 +1,7 @@
+.DS_Store
+node_modules/
+.vercel
+training/checkpoints/
+training/data/
+training/preds/
+__pycache__/

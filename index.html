@@ -55,13 +55,17 @@
   /* camera */
   #camera{background:#000}
   #camera video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-  #camera .mid{position:relative;z-index:1}
+  #camera .mid{position:absolute;inset:0;z-index:1;max-width:none;justify-content:center}
+  #camera.front video{transform:scaleX(-1)}
   #camera .top,#camera .actions{position:relative;z-index:2}
+  #camera .actions{margin-top:auto}
   .guide{position:relative;width:min(72vw,300px);aspect-ratio:1;border-radius:50%;border:1px solid rgba(242,242,242,.3);
     box-shadow:0 0 0 200vmax rgba(0,0,0,.66);transition:border-color 300ms ease}
   .guide svg{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);opacity:0;transition:opacity 300ms ease}
   .guide.seen{border-color:rgba(242,242,242,.6)}
   .guide.lock svg{opacity:1}
+  /* front camera: the screen becomes a ring light around the guide (and draws a ring reflection in the eye) */
+  #camera.front .guide{box-shadow:0 0 0 22px #fff,0 0 60px 26px rgba(255,255,255,.55),0 0 0 200vmax rgba(0,0,0,.66)}
 
   /* loader */
   @keyframes spin{to{transform:rotate(360deg)}}
@@ -135,11 +139,13 @@
       <svg class="ring-a" viewBox="0 0 280 280" aria-hidden="true"><circle cx="140" cy="140" r="139.5" fill="none" stroke="#F2F2F2" stroke-width="1" pathLength="100" stroke-dasharray="22 78" stroke-linecap="round"/></svg>
     </div></div>
     <div class="actions">
-      <span class="hint" id="camHint">Hold still. It captures on its own.</span>
+      <span class="hint" id="camHint"></span>
       <div class="links">
         <button class="tlink" id="camCancel">Cancel</button>
         <span class="sep"></span>
         <label class="tlink">Choose a photo<input type="file" accept="image/*" data-slot="0" class="fileIn" id="camFile" hidden></label>
+        <span class="sep"></span>
+        <button class="tlink" id="flipBtn">Front camera</button>
         <span class="sep" id="torchSep" hidden></span>
         <button class="tlink" id="torchBtn" hidden>Flash off</button>
       </div>
@@ -224,7 +230,7 @@
       <span class="wm">IRIS</span><span class="side"></span>
     </div>
     <div class="mid" style="gap:32px">
-      <span class="body2">Drag the circle onto your iris.</span>
+      <span class="body2" id="adjHint">Drag the circle onto your iris.</span>
       <canvas id="adj" width="880" height="880"></canvas>
       <div class="field">
         <span class="lab">Size</span>
@@ -277,7 +283,10 @@ const snapshot=()=>({src:srcCanvas,img,cx,cy,R,pr,seed:imgSeed,blob:null,url:nul
 function load(s){srcCanvas=s.src; img=s.img; cx=s.cx; cy=s.cy; R=s.R; pr=s.pr; imgSeed=s.seed;}
 
 /* ---------- automatic iris + pupil detection (integro-differential search) ---------- */
-function detectCanvas(srcC,maxSide){
+// opt (all in source pixels, optional): {cx,cy} where to look, span = how far from it (fraction of the short side),
+// rMin/rMax = allowed iris radius. Returns the circle plus `conf` (0..1) and `ok` (is this really an iris?).
+function detectCanvas(srcC,maxSide,opt){
+  opt=opt||{};
   const SW=srcC.videoWidth||srcC.width, SH=srcC.videoHeight||srcC.height;
   const k=Math.min(1,(maxSide||320)/Math.max(SW,SH));
   const w=Math.max(16,Math.round(SW*k)), h=Math.max(16,Math.round(SH*k));
@@ -294,8 +303,11 @@ function detectCanvas(srcC,maxSide){
   const L1=blur(L,1), Lb=blur(L,Math.max(3,Math.round(Math.max(w,h)*0.05))), Lw=blur(Lb,Math.max(6,Math.round(Math.max(w,h)*0.12)));
   const md=Math.min(w,h);
   // darkest large blob, biased to the frame centre
-  let best=1e9, bx=w/2, by=h/2;
+  const ox=opt.cx!=null?opt.cx*k:w/2, oy=opt.cy!=null?opt.cy*k:h/2;
+  const win=opt.span!=null?opt.span*md:Math.max(w,h);
+  let best=1e9, bx=ox, by=oy;
   for(let y=Math.round(h*.1);y<h*.9;y++) for(let x=Math.round(w*.1);x<w*.9;x++){
+    if(Math.abs(x-ox)>win||Math.abs(y-oy)>win) continue;
     // dark compared with its surroundings (the iris sits inside the brighter white of the eye), biased to the centre
     const i=y*w+x, dn=((x-w/2)/w)**2+((y-h/2)/h)**2, s=0.5*Lb[i]+(Lb[i]-Lw[i])+0.8*dn;
     if(s<best){best=s;bx=x;by=y;}
@@ -321,10 +333,11 @@ function detectCanvas(srcC,maxSide){
     return res;
   }
   // iris: strongest dark->bright circular edge, measured on the left/right sides (lids cover top & bottom)
-  let I=search(bx,by,Math.round(md*.14),3,Math.round(md*.08),Math.round(md*.5),side);
-  I=search(I.x,I.y,3,1,Math.round(I.r*.8),Math.round(Math.min(md*.55,I.r*1.2)),side);
+  const rLo=Math.max(4,Math.round(opt.rMin!=null?opt.rMin*k:md*.08)), rHi=Math.round(opt.rMax!=null?opt.rMax*k:md*.5);
+  let I=search(bx,by,Math.round(md*.14),3,rLo,rHi,side);
+  I=search(I.x,I.y,3,1,Math.max(rLo,Math.round(I.r*.8)),Math.min(rHi,Math.round(I.r*1.2)),side);
   // if that was actually the pupil, there is a second strong ring further out: take it
-  const O=search(I.x,I.y,Math.max(2,Math.round(I.r*.12)),1,Math.round(I.r*1.5),Math.round(Math.min(md*.6,I.r*4)),side);
+  const O=search(I.x,I.y,Math.max(2,Math.round(I.r*.12)),1,Math.round(I.r*1.5),Math.min(rHi,Math.round(I.r*4)),side);
   if(O.s>0.6*I.s) I=O;
   // pupil: inside the iris, near its centre
   const P=search(I.x,I.y,Math.max(2,Math.round(I.r*.15)),1,Math.round(I.r*.15),Math.round(I.r*.68),full);
@@ -335,10 +348,134 @@ function detectCanvas(srcC,maxSide){
     pin+=at(I.x+ca*I.r*ratio*0.5,I.y+sa*I.r*ratio*0.5); pn++;
     iin+=at(I.x+ca*I.r*(ratio+1)/2,I.y+sa*I.r*(ratio+1)/2); inn++;}
   const contrast=iin/inn-pin/pn;
+  // is it really an iris? 1) most side rays cross a dark->bright edge at the circle,
+  // 2) just outside is clearly brighter (white of the eye) than just inside, 3) the pupil is darker than the iris
+  let hits=0, inS=0, outS=0;
+  for(const [ca,sa] of side){
+    const v=at(I.x+ca*(I.r+3),I.y+sa*(I.r+3))-at(I.x+ca*(I.r-3),I.y+sa*(I.r-3)); if(v>0.025) hits++;
+    inS+=at(I.x+ca*I.r*0.78,I.y+sa*I.r*0.78); outS+=at(I.x+ca*I.r*1.25,I.y+sa*I.r*1.25);
+  }
+  const edgeFrac=hits/side.length, sclera=(outS-inS)/side.length;
+  const conf=clamp((edgeFrac-0.45)/0.4,0,1)*clamp(sclera/0.14,0,1)*clamp(contrast/0.08,0,1);
+  const ok=edgeFrac>=0.6&&sclera>0.06&&contrast>0.05;
   const kx=SW/w, ky=SH/h;
-  return {cx:I.x*kx, cy:I.y*ky, R:I.r*(kx+ky)/2, pr:ratio, s:I.s, rRel:I.r/md, contrast};
+  return {cx:I.x*kx, cy:I.y*ky, R:I.r*(kx+ky)/2, pr:ratio, s:I.s, rRel:I.r/md, contrast, edgeFrac, sclera, conf, ok};
 }
-function detect(){ const d=detectCanvas(srcCanvas,320); cx=d.cx; cy=d.cy; R=d.R; pr=d.pr; return d; }
+function detect(opt){ const d=detectCanvas(srcCanvas,320,opt); cx=d.cx; cy=d.cy; R=d.R; pr=d.pr; return d; }
+
+/* ---------- iris model: a small segmentation network run in the browser (ONNX Runtime, WebAssembly) ----------
+   It labels every pixel as background / white of the eye / iris / pupil; circles are fitted to that.
+   If the model can't load, everything falls back to the hand-written detection above. */
+const SEG=128;
+let seg=null, segLoading=null;
+function loadSeg(){
+  if(segLoading) return segLoading;
+  segLoading=new Promise(res=>{
+    const sc=document.createElement("script"); sc.src="vendor/ort/ort.wasm.min.js";
+    sc.onload=async()=>{
+      try{
+        ort.env.wasm.wasmPaths=new URL("vendor/ort/",location.href).href;
+        ort.env.wasm.numThreads=1;
+        const sess=await ort.InferenceSession.create("models/iris-seg.onnx",{executionProviders:["wasm"]});
+        seg={sess}; res(seg);
+      }catch(e){ console.warn("Iris model unavailable, using classic detection.",e); res(null); }
+    };
+    sc.onerror=()=>res(null);
+    document.head.appendChild(sc);
+  });
+  return segLoading;
+}
+const segCanvas=document.createElement("canvas"); segCanvas.width=segCanvas.height=SEG;
+const segCtx=segCanvas.getContext("2d",{willReadFrequently:true});
+// run the model on the square (sx,sy,side) of src; anything outside the source stays black
+async function segRun(src,sx,sy,side){
+  const SW=src.videoWidth||src.width, SH=src.videoHeight||src.height, k=SEG/side;
+  segCtx.fillStyle="#000"; segCtx.fillRect(0,0,SEG,SEG);
+  const x0=Math.max(0,sx), y0=Math.max(0,sy), x1=Math.min(SW,sx+side), y1=Math.min(SH,sy+side);
+  if(x1>x0&&y1>y0) segCtx.drawImage(src,x0,y0,x1-x0,y1-y0,(x0-sx)*k,(y0-sy)*k,(x1-x0)*k,(y1-y0)*k);
+  const p=segCtx.getImageData(0,0,SEG,SEG).data, N=SEG*SEG, x=new Float32Array(3*N);
+  for(let i=0;i<N;i++){x[i]=p[i*4]/255; x[N+i]=p[i*4+1]/255; x[2*N+i]=p[i*4+2]/255;}
+  const outT=await seg.sess.run({image:new ort.Tensor("float32",x,[1,3,SEG,SEG])});
+  return outT.probs.data;
+}
+// circles from the label map: iris from the left/right edges of iris+pupil (lids hide top and bottom),
+// pupil from its area. Mirrors fit() in training/predict.py.
+function segFit(P){
+  const N=SEG*SEG, lab=new Uint8Array(N);
+  let n=0;
+  for(let i=0;i<N;i++){let b=0,bv=P[i]; for(let c=1;c<4;c++){const v=P[c*N+i]; if(v>bv){bv=v;b=c;}} lab[i]=b; if(b>=2) n++;}
+  if(n<40) return null;
+  const pts=[];
+  for(let y=0;y<SEG;y++){
+    let a=-1,b=-1;
+    for(let x=0;x<SEG;x++) if(lab[y*SEG+x]>=2){ if(a<0) a=x; b=x; }
+    if(a>=0&&b>a){ if(a>0) pts.push([a+.5,y+.5]); if(b<SEG-1) pts.push([b+.5,y+.5]); }
+  }
+  if(pts.length<12) return null;
+  const kasa=Q=>{
+    let sxx=0,sxy=0,syy=0,sx=0,sy=0,sxz=0,syz=0,sz=0; const m=Q.length;
+    for(const [x,y] of Q){const z=x*x+y*y; sxx+=x*x; sxy+=x*y; syy+=y*y; sx+=x; sy+=y; sxz+=x*z; syz+=y*z; sz+=z;}
+    // normal equations of [2x 2y 1]·c = x²+y²
+    const A=[[4*sxx,4*sxy,2*sx],[4*sxy,4*syy,2*sy],[2*sx,2*sy,m]], B=[2*sxz,2*syz,sz];
+    const det=M=>M[0][0]*(M[1][1]*M[2][2]-M[1][2]*M[2][1])-M[0][1]*(M[1][0]*M[2][2]-M[1][2]*M[2][0])+M[0][2]*(M[1][0]*M[2][1]-M[1][1]*M[2][0]);
+    const D=det(A); if(Math.abs(D)<1e-9) return null;
+    const col=(j)=>A.map((row,i)=>row.map((v,k)=>k===j?B[i]:v));
+    const c0=det(col(0))/D, c1=det(col(1))/D, c2=det(col(2))/D;
+    return [c0,c1,Math.sqrt(Math.max(1e-6,c2+c0*c0+c1*c1))];
+  };
+  let f=kasa(pts); if(!f) return null;
+  let [cxm,cym,r]=f;
+  let res=pts.map(([x,y])=>Math.abs(Math.hypot(x-cxm,y-cym)-r));
+  const med=[...res].sort((a,b)=>a-b)[res.length>>1];
+  const keep=pts.filter((_,i)=>res[i]<Math.max(1.5,2.5*med));
+  if(keep.length>=12){ f=kasa(keep); if(f){ [cxm,cym,r]=f; res=keep.map(([x,y])=>Math.abs(Math.hypot(x-cxm,y-cym)-r)); } }
+  let pn=0,px=0,py=0;
+  for(let i=0;i<N;i++) if(lab[i]===3){pn++; px+=i%SEG; py+=(i/SEG)|0;}
+  let ratio=0.36, centred=false;
+  if(pn>6){ const pcx=px/pn+.5, pcy=py/pn+.5; ratio=clamp(Math.sqrt(pn/Math.PI)/r,0.15,0.7); centred=Math.hypot(pcx-cxm,pcy-cym)<0.35*r; }
+  let inC=0,diskIn=0,ringN=0,ringS=0,sure=0;
+  for(let y=0;y<SEG;y++) for(let x=0;x<SEG;x++){
+    const i=y*SEG+x, d2=(x+.5-cxm)**2+(y+.5-cym)**2, inside=d2<=r*r;
+    if(inside){ inC++; if(lab[i]>=2) diskIn++; }
+    else if(d2<=(1.3*r)**2){ ringN++; if(lab[i]===1) ringS++; }
+    if(lab[i]>=2) sure+=P[2*N+i]+P[3*N+i];
+  }
+  const cover=diskIn/Math.max(1,inC), spill=(n-diskIn)/n, sclera=ringN?ringS/ringN:0;
+  const roundness=res.reduce((a,b)=>a+b,0)/res.length/r; sure/=n;
+  const conf=clamp((cover-0.3)/0.4,0,1)*clamp((0.12-roundness)/0.08,0,1)*clamp((sure-0.6)/0.3,0,1)
+    *clamp(sclera/0.25,0,1)*(centred?1:pn>6?0.6:0.3)*clamp((0.25-spill)/0.15,0,1);   // a real eye shows a pupil
+  return {cx:cxm,cy:cym,r,pr:ratio,conf,ok:conf>0.35&&r>3};
+}
+// pass 1 on a region (default: the whole frame, letterboxed), pass 2 on a crop around the iris it found
+async function segDetect(src,region){
+  const SW=src.videoWidth||src.width, SH=src.videoHeight||src.height, M=Math.max(SW,SH);
+  const r1=region||{sx:(SW-M)/2,sy:(SH-M)/2,side:M};
+  const f=segFit(await segRun(src,r1.sx,r1.sy,r1.side)); if(!f) return null;
+  let k=r1.side/SEG; const cx1=r1.sx+f.cx*k, cy1=r1.sy+f.cy*k, rr=f.r*k;
+  const side=rr*2.6, sx=cx1-side/2, sy=cy1-side/2;
+  const g=segFit(await segRun(src,sx,sy,side));
+  if(!g) return {cx:cx1,cy:cy1,R:rr,pr:f.pr,conf:f.conf*0.5,ok:false};
+  k=side/SEG;
+  return {cx:sx+g.cx*k,cy:sy+g.cy*k,R:g.r*k,pr:g.pr,conf:g.conf,ok:g.ok,model:true};
+}
+// detection used for photos and captures: the model when available, else the classic search
+async function detectAny(opt,hint){
+  await Promise.race([loadSeg(),sleep(6000)]);
+  if(seg){
+    try{
+      const region=hint?{sx:hint.cx-hint.R*2,sy:hint.cy-hint.R*2,side:hint.R*4}:null;
+      const d=await segDetect(srcCanvas,region);
+      if(d&&d.ok){ cx=d.cx; cy=d.cy; R=d.R; pr=d.pr; return d; }
+      // the model isn't sure: accept the classic search only if it is confident on its own
+      const c=detect(opt); if(c.ok) return c;
+      if(d){ cx=d.cx; cy=d.cy; R=d.R; pr=d.pr; return d; }
+      return {cx:img.w/2,cy:img.h/2,R:Math.min(img.w,img.h)*0.18,pr:0.36,conf:0,ok:false};
+    }catch(e){ console.warn(e); }
+  }
+  return detect(opt);
+}
+// start loading the model once the page is idle
+setTimeout(()=>{ if(window.requestIdleCallback) requestIdleCallback(()=>loadSeg()); else loadSeg(); },800);
 
 
 
@@ -424,26 +561,30 @@ function playFusion(){
 
 /* ---------- live camera: back camera + flash, auto-capture ---------- */
 const video=$("video"), guide=$("guide");
-let stream=null, track=null, camSlot=0, camTimer=null, camT0=0, hist=[], best=null, capturing=false, audioCtx=null;
+let stream=null, track=null, camSlot=0, camTimer=null, camT0=0, hist=[], capturing=false, audioCtx=null, facing="environment", lastLive=null;
+const HINT_BACK="Put the camera lens right in front of your eye, about 15 cm away. It captures on its own.";
+const HINT_FRONT="Fit your iris inside the circle and hold still.";
 const onCam=()=>$("camera").classList.contains("on");
 
 async function startCamera(slot){
   camSlot=slot; backTo=slot?"fuse":"home"; $("camFile").dataset.slot=slot;
-  hist=[]; best=null; capturing=false; guide.className="guide";
-  $("camHint").textContent="Hold still. It captures on its own.";
+  hist=[]; capturing=false; lastLive=null; guide.className="guide";
+  $("camera").classList.toggle("front",facing==="user");
+  $("camHint").textContent=facing==="user"?HINT_FRONT:HINT_BACK;
+  $("flipBtn").textContent=facing==="user"?"Back camera":"Front camera";
   $("torchBtn").hidden=$("torchSep").hidden=true;
   try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); audioCtx.resume(); }catch(e){}
   show("camera");
   if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)) return camFail();
   try{
-    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}});
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:facing},width:{ideal:1920},height:{ideal:1080}}});
   }catch(e){ return camFail(); }
   if(!onCam()){ stopCamera(); return; }
   video.srcObject=stream;
   try{ await video.play(); }catch(e){}
   track=stream.getVideoTracks()[0];
   try{ await track.applyConstraints({advanced:[{focusMode:"continuous"}]}); }catch(e){}
-  await setTorch(true);
+  if(facing==="environment") await setTorch(true);
   camT0=performance.now(); tick();
 }
 async function setTorch(on){
@@ -456,10 +597,11 @@ async function setTorch(on){
     return true;
   }catch(e){ return false; }
 }
+$("flipBtn").addEventListener("click",()=>{ facing=facing==="user"?"environment":"user"; stopCamera(); startCamera(camSlot); });
 $("torchBtn").addEventListener("click",()=>setTorch(!$("torchBtn").dataset.on));
 function stopCamera(){
   clearTimeout(camTimer); camTimer=null;
-  if(track){ try{track.applyConstraints({advanced:[{torch:false}]});}catch(e){} }
+  if(track&&$("torchBtn").dataset.on){ track.applyConstraints({advanced:[{torch:false}]}).catch(()=>{}); }
   if(stream) stream.getTracks().forEach(t=>t.stop());
   stream=null; track=null; video.srcObject=null;
 }
@@ -487,20 +629,37 @@ function stable(h){
   const a=h[0], b=h[h.length-1], r=(a.R+b.R)/2;
   return h.every(d=>Math.hypot(d.cx-a.cx,d.cy-a.cy)<0.12*r) && Math.abs(a.R-b.R)<0.15*r;
 }
-function looksLikeIris(d){ return d.s>0.02 && d.rRel>0.06 && d.rRel<0.5 && d.contrast>0.03; }
+// where to look in the video: the centre of the frame. With the front camera the user aims, so the
+// iris should also be about the size of the on-screen guide.
+function liveOpt(){
+  const vw=video.videoWidth, vh=video.videoHeight, md=Math.min(vw,vh);
+  if(facing==="user"){
+    const rc=video.getBoundingClientRect(), sc=Math.max(rc.width/vw,rc.height/vh);
+    const gR=guide.getBoundingClientRect().width/2/sc;
+    return {cx:vw/2,cy:vh/2,span:0.22,rMin:gR*0.45,rMax:gR*1.35};
+  }
+  return {cx:vw/2,cy:vh/2,span:0.32,rMin:md*0.08,rMax:md*0.45};
+}
 
-function tick(){
+function liveRegion(){
+  const o=liveOpt(), vw=video.videoWidth, vh=video.videoHeight;
+  const side=facing==="user"?o.rMax*2.4:Math.min(vw,vh);
+  return {sx:vw/2-side/2,sy:vh/2-side/2,side};
+}
+async function tick(){
   if(!stream||capturing) return;
   if(video.readyState>=2&&video.videoWidth){
-    const d=detectCanvas(video,200), el=performance.now()-camT0;
-    if(looksLikeIris(d)){
+    let d=null;
+    if(seg){ try{ d=await segDetect(video,liveRegion()); }catch(e){} if(!stream||capturing) return; }
+    if(!d||!d.ok){ const c=detectCanvas(video,240,liveOpt()); if(c.ok||!d) d=c; }
+    const el=performance.now()-camT0;
+    if(d.ok){
       hist.push(d); if(hist.length>3) hist.shift();
-      guide.classList.add("seen");
-      if(!best||d.s>best.d.s) best={d,canvas:grab()};
+      guide.classList.add("seen"); lastLive=d;
       if(hist.length===3&&stable(hist)) return burst(d);
     }else{ hist=[]; guide.classList.remove("seen"); }
-    if(el>8000&&best) return finishCapture(best.canvas);
-    if(el>5000) $("camHint").textContent="Move a little closer, or tap to capture.";
+    // never capture something that isn't clearly an eye on its own: after a while, offer the manual way
+    if(el>9000) $("camHint").textContent=facing==="user"?"Tap the screen to capture.":"Not finding it. Try the front camera, or tap to capture.";
   }
   camTimer=setTimeout(tick,180);
 }
@@ -509,7 +668,7 @@ async function burst(d){
   capturing=true; guide.classList.add("lock");
   let top=null, ts=-1;
   for(let i=0;i<5;i++){ const c=grab(), s=sharpness(c,d); if(s>ts){ts=s; top=c;} await sleep(70); }
-  finishCapture(top);
+  finishCapture(top,d||lastLive);
 }
 $("camTap").addEventListener("click",()=>{ if(stream&&!capturing&&video.videoWidth) burst(null); });
 
@@ -518,10 +677,27 @@ function chime(){
     o.frequency.value=1320; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.18,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
     o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+0.2); }catch(e){}
 }
-function finishCapture(c){
+async function finishCapture(c,hint){
+  const opt=hint?{cx:hint.cx,cy:hint.cy,span:0.08,rMin:hint.R*0.8,rMax:hint.R*1.25}
+    :{cx:c.width/2,cy:c.height/2,span:0.3};
   capturing=true; stopCamera(); chime(); buzz();
-  setImage(c); detect(); scans[camSlot]=snapshot();
-  if(camSlot===0){ scans[1]=null; swapSides=false; runSingle(); } else runFusion(true);
+  setImage(c);
+  const k=img.w/c.width;   // setImage may downscale
+  ["cx","cy","rMin","rMax"].forEach(key=>{ if(opt[key]!=null) opt[key]*=k; });
+  const hk=img.w/c.width, h2=hint?{cx:hint.cx*hk,cy:hint.cy*hk,R:hint.R*hk}:null;
+  startFrom(camSlot,await detectAny(opt,h2));
+}
+// go on with a detected eye, or ask the user to place the circle when we're not sure
+function startFrom(slot,d){
+  if(!d.ok){
+    cx=img.w/2; cy=img.h/2; R=Math.min(img.w,img.h)*0.18; pr=0.36;
+    if(d.conf>0.4){ cx=d.cx; cy=d.cy; R=d.R; pr=d.pr; }
+    scans[slot]=snapshot(); if(slot===0){ scans[1]=null; swapSides=false; }
+    openAdjust(slot,"Couldn't find your iris. Drag the circle onto it.");
+    return;
+  }
+  scans[slot]=snapshot();
+  if(slot===0){ scans[1]=null; swapSides=false; runSingle(); } else runFusion(true);
 }
 
 /* ---------- inputs ---------- */
@@ -538,8 +714,7 @@ document.querySelectorAll(".fileIn").forEach(inp=>inp.addEventListener("change",
   const slot=+inp.dataset.slot;
   stopCamera();
   try{
-    setImage(await decode(f)); detect(); scans[slot]=snapshot();
-    if(slot===0){ scans[1]=null; swapSides=false; runSingle(); } else runFusion(true);
+    setImage(await decode(f)); startFrom(slot,await detectAny());
   }catch(err){}
 }));
 
@@ -570,7 +745,7 @@ function makeSample(ox,oy,sc){
   return b;
 }
 
-$("sample").addEventListener("click",()=>{setImage(makeSample()); detect(); scans[0]=snapshot(); scans[1]=null; runSingle();});
+$("sample").addEventListener("click",async()=>{setImage(makeSample()); startFrom(0,await detectAny());});
 
 $("toFuse").addEventListener("click",()=>{$("thumbA").src=scans[0].url; show("fuse");});
 $("fuseBack").addEventListener("click",()=>show("result"));
@@ -644,13 +819,18 @@ function fills(){
   $("fR").style.width=((r.value-r.min)/(r.max-r.min)*100)+"%";
   $("fP").style.width=((p.value-p.min)/(p.max-p.min)*100)+"%";
 }
-document.querySelectorAll("[data-adjust]").forEach(b=>b.addEventListener("click",()=>{
-  adjustSlot=+b.dataset.adjust; load(scans[adjustSlot]);
+let adjustBack="result";
+function openAdjust(slot,msg){
+  adjustSlot=slot; load(scans[slot]);
+  adjustBack=$("result").classList.contains("on")?"result":$("fusion").classList.contains("on")?"fusion":(slot?"fuse":"home");
+  $("adjHint").textContent=msg||"Drag the circle onto your iris.";
   adj.width=880; adj.height=Math.round(880*Math.min(1.1,img.h/img.w));
   $("aR").value=Math.round(R/maxR()*100); $("aP").value=Math.round(pr*100);
   fills(); drawAdj(); show("adjustS");
-}));
-$("adjBack").addEventListener("click",()=>show(adjustSlot===0?"result":"fusion"));
+}
+document.querySelectorAll("[data-adjust]").forEach(b=>b.addEventListener("click",()=>openAdjust(+b.dataset.adjust)));
+
+$("adjBack").addEventListener("click",()=>show(adjustBack));
 let drag=false;
 function pt(e){const rc=adj.getBoundingClientRect();
   const X=(e.clientX-rc.left)/rc.width*adj.width, Y=(e.clientY-rc.top)/rc.height*adj.height;
@@ -665,7 +845,7 @@ $("done").addEventListener("click",()=>{
   if(adjustSlot===0){ runSingle(); } else runFusion(true);
 });
 
-window.__iris={setImage,detect,makeSample,get:()=>({cx,cy,R,pr})};
+window.__iris={setImage,detect,detectAny,loadSeg,makeSample,get:()=>({cx,cy,R,pr})};
 })();
 </script>
 </body>

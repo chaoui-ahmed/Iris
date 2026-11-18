@@ -1,2 +1,7 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# model and runtime binaries: never touch
+*.onnx binary
+*.pt binary
+*.wasm binary
+*.png binary
