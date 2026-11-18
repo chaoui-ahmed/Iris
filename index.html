@@ -52,6 +52,17 @@
   .links{display:flex;align-items:center;gap:16px;padding-top:4px}
   .sep{width:1px;height:12px;background:var(--line)}
 
+  /* camera */
+  #camera{background:#000}
+  #camera video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  #camera .mid{position:relative;z-index:1}
+  #camera .top,#camera .actions{position:relative;z-index:2}
+  .guide{position:relative;width:min(72vw,300px);aspect-ratio:1;border-radius:50%;border:1px solid rgba(242,242,242,.3);
+    box-shadow:0 0 0 200vmax rgba(0,0,0,.66);transition:border-color 300ms ease}
+  .guide svg{position:absolute;inset:-1px;width:calc(100% + 2px);height:calc(100% + 2px);opacity:0;transition:opacity 300ms ease}
+  .guide.seen{border-color:rgba(242,242,242,.6)}
+  .guide.lock svg{opacity:1}
+
   /* loader */
   @keyframes spin{to{transform:rotate(360deg)}}
   @keyframes spinr{to{transform:rotate(-360deg)}}
@@ -110,9 +121,28 @@
       <h1>Your eye,<br>up close.</h1>
     </div>
     <div class="actions" style="gap:24px">
-      <label class="btn btn-primary">Scan your eye<input type="file" accept="image/*" data-slot="0" class="fileIn" hidden></label>
-      <span class="hint">Use the back camera, about 10 cm from your eye. Soft light works best.</span>
+      <button class="btn btn-primary" data-cam="0">Scan your eye</button>
+      <span class="hint">Uses the back camera with the flash. Hold it about 10 cm from your eye, no need to aim.</span>
       <button class="tlink" id="sample">Try a sample</button>
+    </div>
+  </section>
+
+  <!-- Camera -->
+  <section id="camera" class="screen">
+    <video id="video" playsinline muted autoplay></video>
+    <div class="top" style="justify-content:center"><span class="wm">IRIS</span></div>
+    <div class="mid" id="camTap"><div class="guide" id="guide">
+      <svg class="ring-a" viewBox="0 0 280 280" aria-hidden="true"><circle cx="140" cy="140" r="139.5" fill="none" stroke="#F2F2F2" stroke-width="1" pathLength="100" stroke-dasharray="22 78" stroke-linecap="round"/></svg>
+    </div></div>
+    <div class="actions">
+      <span class="hint" id="camHint">Hold still. It captures on its own.</span>
+      <div class="links">
+        <button class="tlink" id="camCancel">Cancel</button>
+        <span class="sep"></span>
+        <label class="tlink">Choose a photo<input type="file" accept="image/*" data-slot="0" class="fileIn" id="camFile" hidden></label>
+        <span class="sep" id="torchSep" hidden></span>
+        <button class="tlink" id="torchBtn" hidden>Flash off</button>
+      </div>
     </div>
   </section>
 
@@ -135,7 +165,7 @@
     <div class="mid"><div class="frame"><img id="resImg" alt="Your iris, rendered up close"></div></div>
     <div class="actions">
       <button class="btn btn-primary" id="save">Save</button>
-      <label class="btn btn-secondary">New scan<input type="file" accept="image/*" data-slot="0" class="fileIn" hidden></label>
+      <button class="btn btn-secondary" data-cam="0">New scan</button>
       <div class="links">
         <button class="tlink" id="toFuse">Fuse with another eye</button>
         <span class="sep"></span>
@@ -161,7 +191,7 @@
       </div>
     </div>
     <div class="actions">
-      <label class="btn btn-primary">Scan second eye<input type="file" accept="image/*" data-slot="1" class="fileIn" hidden></label>
+      <button class="btn btn-primary" data-cam="1">Scan second eye</button>
       <span class="hint">Same as before. Back camera, about 10 cm away.</span>
     </div>
   </section>
@@ -247,11 +277,12 @@ const snapshot=()=>({src:srcCanvas,img,cx,cy,R,pr,seed:imgSeed,blob:null,url:nul
 function load(s){srcCanvas=s.src; img=s.img; cx=s.cx; cy=s.cy; R=s.R; pr=s.pr; imgSeed=s.seed;}
 
 /* ---------- automatic iris + pupil detection (integro-differential search) ---------- */
-function detect(){
-  const k=Math.min(1,320/Math.max(img.w,img.h));
-  const w=Math.max(16,Math.round(img.w*k)), h=Math.max(16,Math.round(img.h*k));
+function detectCanvas(srcC,maxSide){
+  const SW=srcC.videoWidth||srcC.width, SH=srcC.videoHeight||srcC.height;
+  const k=Math.min(1,(maxSide||320)/Math.max(SW,SH));
+  const w=Math.max(16,Math.round(SW*k)), h=Math.max(16,Math.round(SH*k));
   const c=document.createElement("canvas"); c.width=w; c.height=h;
-  const g=c.getContext("2d",{willReadFrequently:true}); g.drawImage(srcCanvas,0,0,w,h);
+  const g=c.getContext("2d",{willReadFrequently:true}); g.drawImage(srcC,0,0,w,h);
   const d=g.getImageData(0,0,w,h).data, L=new Float32Array(w*h);
   for(let i=0;i<w*h;i++) L[i]=lumOf(d[i*4],d[i*4+1],d[i*4+2])/255;
   const blur=(A,r)=>{
@@ -260,12 +291,13 @@ function detect(){
     for(let x=0;x<w;x++) for(let y=0;y<h;y++){let s=0,n=0; for(let q=Math.max(0,y-r);q<=Math.min(h-1,y+r);q++){s+=T[q*w+x];n++;} B[y*w+x]=s/n;}
     return B;
   };
-  const L1=blur(L,1), Lb=blur(L,Math.max(3,Math.round(Math.max(w,h)*0.05)));
+  const L1=blur(L,1), Lb=blur(L,Math.max(3,Math.round(Math.max(w,h)*0.05))), Lw=blur(Lb,Math.max(6,Math.round(Math.max(w,h)*0.12)));
   const md=Math.min(w,h);
   // darkest large blob, biased to the frame centre
   let best=1e9, bx=w/2, by=h/2;
   for(let y=Math.round(h*.1);y<h*.9;y++) for(let x=Math.round(w*.1);x<w*.9;x++){
-    const dn=((x-w/2)/w)**2+((y-h/2)/h)**2, s=Lb[y*w+x]+0.8*dn;
+    // dark compared with its surroundings (the iris sits inside the brighter white of the eye), biased to the centre
+    const i=y*w+x, dn=((x-w/2)/w)**2+((y-h/2)/h)**2, s=0.5*Lb[i]+(Lb[i]-Lw[i])+0.8*dn;
     if(s<best){best=s;bx=x;by=y;}
   }
   const at=(x,y)=>L1[clamp(Math.round(y),0,h-1)*w+clamp(Math.round(x),0,w-1)];
@@ -297,9 +329,16 @@ function detect(){
   // pupil: inside the iris, near its centre
   const P=search(I.x,I.y,Math.max(2,Math.round(I.r*.15)),1,Math.round(I.r*.15),Math.round(I.r*.68),full);
   let ratio=P.s>0.012?clamp(P.r/I.r,0.18,0.68):0.36;
-  const kx=img.w/w, ky=img.h/h;
-  cx=I.x*kx; cy=I.y*ky; R=I.r*(kx+ky)/2; pr=ratio;
+  // sanity: the pupil should be clearly darker than the iris around it
+  let pin=0,pn=0,iin=0,inn=0;
+  for(let a=0;a<24;a++){const ca=Math.cos(a/24*6.283), sa=Math.sin(a/24*6.283);
+    pin+=at(I.x+ca*I.r*ratio*0.5,I.y+sa*I.r*ratio*0.5); pn++;
+    iin+=at(I.x+ca*I.r*(ratio+1)/2,I.y+sa*I.r*(ratio+1)/2); inn++;}
+  const contrast=iin/inn-pin/pn;
+  const kx=SW/w, ky=SH/h;
+  return {cx:I.x*kx, cy:I.y*ky, R:I.r*(kx+ky)/2, pr:ratio, s:I.s, rRel:I.r/md, contrast};
 }
+function detect(){ const d=detectCanvas(srcCanvas,320); cx=d.cx; cy=d.cy; R=d.R; pr=d.pr; return d; }
 
 
 
@@ -383,6 +422,108 @@ function playFusion(){
   a.src=L.url; b.src=Rr.url; f.src=fused.url;
 }
 
+/* ---------- live camera: back camera + flash, auto-capture ---------- */
+const video=$("video"), guide=$("guide");
+let stream=null, track=null, camSlot=0, camTimer=null, camT0=0, hist=[], best=null, capturing=false, audioCtx=null;
+const onCam=()=>$("camera").classList.contains("on");
+
+async function startCamera(slot){
+  camSlot=slot; backTo=slot?"fuse":"home"; $("camFile").dataset.slot=slot;
+  hist=[]; best=null; capturing=false; guide.className="guide";
+  $("camHint").textContent="Hold still. It captures on its own.";
+  $("torchBtn").hidden=$("torchSep").hidden=true;
+  try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); audioCtx.resume(); }catch(e){}
+  show("camera");
+  if(!(navigator.mediaDevices&&navigator.mediaDevices.getUserMedia)) return camFail();
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}});
+  }catch(e){ return camFail(); }
+  if(!onCam()){ stopCamera(); return; }
+  video.srcObject=stream;
+  try{ await video.play(); }catch(e){}
+  track=stream.getVideoTracks()[0];
+  try{ await track.applyConstraints({advanced:[{focusMode:"continuous"}]}); }catch(e){}
+  await setTorch(true);
+  camT0=performance.now(); tick();
+}
+async function setTorch(on){
+  const caps=(track&&track.getCapabilities)?track.getCapabilities():{};
+  if(!caps.torch) return false;   // e.g. iPhone browsers: no flash control from a web page
+  try{
+    await track.applyConstraints({advanced:[{torch:on}]});
+    $("torchBtn").hidden=$("torchSep").hidden=false;
+    $("torchBtn").textContent=on?"Flash off":"Flash on"; $("torchBtn").dataset.on=on?"1":"";
+    return true;
+  }catch(e){ return false; }
+}
+$("torchBtn").addEventListener("click",()=>setTorch(!$("torchBtn").dataset.on));
+function stopCamera(){
+  clearTimeout(camTimer); camTimer=null;
+  if(track){ try{track.applyConstraints({advanced:[{torch:false}]});}catch(e){} }
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  stream=null; track=null; video.srcObject=null;
+}
+function camFail(){ $("camHint").textContent="Camera unavailable. Choose a photo instead."; }
+$("camCancel").addEventListener("click",()=>{stopCamera(); show(backTo);});
+document.addEventListener("visibilitychange",()=>{ if(document.hidden&&stream){ stopCamera(); if(onCam()) show(backTo);} });
+document.querySelectorAll("[data-cam]").forEach(b=>b.addEventListener("click",()=>startCamera(+b.dataset.cam)));
+
+function grab(){
+  const c=document.createElement("canvas"); c.width=video.videoWidth; c.height=video.videoHeight;
+  c.getContext("2d").drawImage(video,0,0); return c;
+}
+// sharpness = variance of the Laplacian over the iris area (higher = crisper)
+function sharpness(c,d){
+  const n=192, t=document.createElement("canvas"); t.width=t.height=n;
+  const side=d?d.R*2.2:Math.min(c.width,c.height)*0.5, x0=d?d.cx-side/2:(c.width-side)/2, y0=d?d.cy-side/2:(c.height-side)/2;
+  const g=t.getContext("2d",{willReadFrequently:true}); g.drawImage(c,x0,y0,side,side,0,0,n,n);
+  const p=g.getImageData(0,0,n,n).data, L=new Float32Array(n*n);
+  for(let i=0;i<n*n;i++) L[i]=p[i*4]*.2126+p[i*4+1]*.7152+p[i*4+2]*.0722;
+  let s=0,s2=0,m=0;
+  for(let y=1;y<n-1;y++) for(let x=1;x<n-1;x++){const i=y*n+x, v=4*L[i]-L[i-1]-L[i+1]-L[i-n]-L[i+n]; s+=v; s2+=v*v; m++;}
+  return s2/m-(s/m)**2;
+}
+function stable(h){
+  const a=h[0], b=h[h.length-1], r=(a.R+b.R)/2;
+  return h.every(d=>Math.hypot(d.cx-a.cx,d.cy-a.cy)<0.12*r) && Math.abs(a.R-b.R)<0.15*r;
+}
+function looksLikeIris(d){ return d.s>0.02 && d.rRel>0.06 && d.rRel<0.5 && d.contrast>0.03; }
+
+function tick(){
+  if(!stream||capturing) return;
+  if(video.readyState>=2&&video.videoWidth){
+    const d=detectCanvas(video,200), el=performance.now()-camT0;
+    if(looksLikeIris(d)){
+      hist.push(d); if(hist.length>3) hist.shift();
+      guide.classList.add("seen");
+      if(!best||d.s>best.d.s) best={d,canvas:grab()};
+      if(hist.length===3&&stable(hist)) return burst(d);
+    }else{ hist=[]; guide.classList.remove("seen"); }
+    if(el>8000&&best) return finishCapture(best.canvas);
+    if(el>5000) $("camHint").textContent="Move a little closer, or tap to capture.";
+  }
+  camTimer=setTimeout(tick,180);
+}
+// a short burst of frames, keep the sharpest one
+async function burst(d){
+  capturing=true; guide.classList.add("lock");
+  let top=null, ts=-1;
+  for(let i=0;i<5;i++){ const c=grab(), s=sharpness(c,d); if(s>ts){ts=s; top=c;} await sleep(70); }
+  finishCapture(top);
+}
+$("camTap").addEventListener("click",()=>{ if(stream&&!capturing&&video.videoWidth) burst(null); });
+
+function chime(){
+  try{ const t=audioCtx.currentTime, o=audioCtx.createOscillator(), g=audioCtx.createGain();
+    o.frequency.value=1320; g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.18,t+0.01); g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
+    o.connect(g).connect(audioCtx.destination); o.start(t); o.stop(t+0.2); }catch(e){}
+}
+function finishCapture(c){
+  capturing=true; stopCamera(); chime(); buzz();
+  setImage(c); detect(); scans[camSlot]=snapshot();
+  if(camSlot===0){ scans[1]=null; swapSides=false; runSingle(); } else runFusion(true);
+}
+
 /* ---------- inputs ---------- */
 function decode(file){
   return new Promise((res,rej)=>{
@@ -395,6 +536,7 @@ function decode(file){
 document.querySelectorAll(".fileIn").forEach(inp=>inp.addEventListener("change",async e=>{
   const f=e.target.files&&e.target.files[0]; e.target.value=""; if(!f) return;
   const slot=+inp.dataset.slot;
+  stopCamera();
   try{
     setImage(await decode(f)); detect(); scans[slot]=snapshot();
     if(slot===0){ scans[1]=null; swapSides=false; runSingle(); } else runFusion(true);

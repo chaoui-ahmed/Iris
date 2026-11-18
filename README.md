@@ -6,6 +6,8 @@ Everything runs on the device: no server, no AI model, no API. Hosting is just s
 
 ## How it works
 
+0. **Capture.** "Scan your eye" opens the back camera with the flash on (where the browser allows it). You can't see the screen while the phone faces your eye, so it captures on its own: once it sees the same iris in a few frames in a row, it takes a short burst, keeps the sharpest frame, then chimes and buzzes. Tapping the screen captures right away, and "Choose a photo" uses an existing picture.
+
 1. **Find the eye.** The app searches the photo for the strongest circular dark-to-bright edge (iris to white of the eye), then for the pupil inside it. Edges from single bright spots, like a flash reflection, are ignored.
 2. **Unwrap the iris.** The ring is turned into a flat rectangle (angle × radius). Eyelids, lashes and glare are detected per ring and replaced.
 3. **Keep what's real.** The colours, their layout and the fine texture the camera actually caught come from the photo.
