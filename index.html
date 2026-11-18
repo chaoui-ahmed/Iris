@@ -8,8 +8,14 @@
 <meta name="theme-color" content="#000000">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta property="og:title" content="Iris">
-<meta property="og:description" content="Your eye, up close.">
+<meta property="og:title" content="IRIS — your eye, up close">
+<meta property="og:description" content="Scan your eye with your phone and get a macro picture of your iris. Fuse it with a friend's.">
+<meta property="og:image" content="https://iriseye.vercel.app/og.jpg">
+<meta property="og:url" content="https://iriseye.vercel.app/">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://iriseye.vercel.app/og.jpg">
+<script src="config.js"></script>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-512.png">
 <link rel="manifest" href="manifest.webmanifest">
@@ -122,6 +128,16 @@
   .rng:active::-webkit-slider-thumb{transform:scale(.9)}
 
   [hidden]{display:none!important}
+  .thumb.big{width:132px;height:132px;margin:0}
+  ul.plain{list-style:none;display:flex;flex-direction:column;gap:8px;align-items:center;font-size:15px;color:var(--grey)}
+  .products{width:100%;display:flex;flex-direction:column;border-top:1px solid var(--line)}
+  .product{display:flex;justify-content:space-between;align-items:center;padding:16px 4px;border-bottom:1px solid var(--line);background:none;border-left:0;border-right:0;border-top:0;
+    color:var(--white);font:300 15px Inter,system-ui,sans-serif;cursor:pointer;text-align:left}
+  .product span:last-child{color:var(--grey)}
+  .product:active{background:rgba(242,242,242,.06)}
+  .toast{position:fixed;left:50%;bottom:calc(28px + env(safe-area-inset-bottom));transform:translateX(-50%);background:#1a1a1d;border:1px solid var(--line);
+    color:var(--white);font-size:13px;padding:10px 16px;border-radius:999px;z-index:10;max-width:86vw;text-align:center}
+  .ad{width:100%;min-height:60px;margin-top:4px}
   @media (prefers-reduced-motion:reduce){*{animation-duration:1ms!important;transition-duration:1ms!important}}
 </style>
 </head>
@@ -134,11 +150,16 @@
     <div class="mid">
       <svg width="120" height="120" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22.5" fill="none" stroke="#2A2A2E" stroke-width="1" vector-effect="non-scaling-stroke"/><circle cx="24" cy="24" r="15" fill="none" stroke="#2A2A2E" stroke-width="1" vector-effect="non-scaling-stroke"/><circle cx="24" cy="24" r="7.5" fill="none" stroke="#5D5D63" stroke-width="1" vector-effect="non-scaling-stroke"/><circle cx="24" cy="24" r="2.6" fill="#F2F2F2"/></svg>
       <h1>Your eye,<br>up close.</h1>
+      <span class="body2" id="inviteLine" hidden>A friend sent you IRIS. Scan your eye, then fuse it with theirs.</span>
     </div>
     <div class="actions" style="gap:24px">
       <button class="btn btn-primary" data-cam="0">Scan your eye</button>
       <span class="hint">Uses the back camera with the flash. Hold it about 10 cm from your eye, no need to aim.</span>
-      <button class="tlink" id="sample">Try a sample</button>
+      <div class="links">
+        <button class="tlink" id="sample">Try a sample</button>
+        <span class="sep"></span>
+        <a class="tlink" href="privacy.html">Privacy</a>
+      </div>
     </div>
   </section>
 
@@ -210,6 +231,7 @@
     <div class="actions">
       <button class="btn btn-primary" data-cam="1">Scan second eye</button>
       <span class="hint">Same as before. Back camera, about 10 cm away.</span>
+      <button class="tlink" id="invite">Send IRIS to a friend</button>
     </div>
   </section>
 
@@ -245,9 +267,64 @@
     <div class="actions">
       <button class="btn btn-primary" id="shareGo">Share</button>
       <button class="btn btn-secondary" id="saveGo">Save to device</button>
-      <span class="hint">Opens your share sheet: Instagram, TikTok, Messages.</span>
+      <div class="links" id="moneyLinks">
+        <button class="tlink" id="hdBtn" hidden>Get HD, no watermark</button>
+        <span class="sep" id="moneySep" hidden></span>
+        <button class="tlink" id="printBtn" hidden>Order a print or gift</button>
+      </div>
+      <div class="ad" id="adSlot" hidden></div>
     </div>
   </section>
+
+  <!-- HD pack (paid) -->
+  <section id="hdS" class="screen">
+    <div class="top">
+      <button class="tlink side back" style="text-align:left;padding-left:0">Back</button>
+      <span class="wm">IRIS</span><span class="side"></span>
+    </div>
+    <div class="mid" style="gap:28px">
+      <div class="thumb big"><img id="hdThumb" alt=""></div>
+      <div style="display:flex;flex-direction:column;align-items:center;gap:12px">
+        <h1 style="font-size:28px;line-height:36px">HD pack</h1>
+        <ul class="plain" id="hdList"></ul>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="hdBuy">Unlock</button>
+      <span class="hint">Secure payment by Stripe. One payment, unlocks HD on this phone. Your scan never leaves it.</span>
+    </div>
+  </section>
+
+  <!-- Prints and gifts -->
+  <section id="printS" class="screen">
+    <div class="top">
+      <button class="tlink side back" style="text-align:left;padding-left:0">Back</button>
+      <span class="wm">IRIS</span><span class="side"></span>
+    </div>
+    <div class="mid" style="gap:24px">
+      <div class="thumb big"><img id="printThumb" alt=""></div>
+      <div class="products" id="products"></div>
+    </div>
+    <div class="actions">
+      <span class="hint">Printed in high quality and shipped to you. Only the finished picture is uploaded, when you order, to print it.</span>
+    </div>
+  </section>
+
+  <!-- Order confirmed -->
+  <section id="orderS" class="screen">
+    <div class="top" style="justify-content:center"><span class="wm">IRIS</span></div>
+    <div class="mid" style="gap:20px">
+      <h1>Order received.</h1>
+      <span class="body2">Stripe is emailing your receipt. We'll write again when it ships.</span>
+    </div>
+    <div class="actions">
+      <button class="btn btn-primary" id="orderBack">Back to my iris</button>
+      <button class="btn btn-secondary" data-cam="0">New scan</button>
+      <div class="ad" id="adSlot2" hidden></div>
+    </div>
+  </section>
+
+  <div class="toast" id="toast" hidden></div>
 
   <!-- Adjust (fallback) -->
   <section id="adjustS" class="screen">
@@ -510,22 +587,22 @@ const NW=Math.max(2,Math.min(8,(navigator.hardwareConcurrency||4)));
 const workers=Array.from({length:NW},()=>new Worker("render-worker.js"));
 const eye=s=>({img:s.img,cx:s.cx,cy:s.cy,R:s.R,pr:s.pr});
 function render(spec){
-  const my=++job;
+  const my=++job, Z=spec.S||S;
   return new Promise((resolve,reject)=>{
-    const id=octx.createImageData(S,S), D=id.data;
+    const id=octx.createImageData(Z,Z), D=id.data;
     let left=NW;
     workers.forEach((wk,k)=>{
       wk.onmessage=e=>{
         if(e.data.id!==my) return;
         const {start,step,band}=e.data;
-        for(let y=start,row=0;y<S;y+=step,row++) D.set(band.subarray(row*S*4,(row+1)*S*4),y*S*4);
+        for(let y=start,row=0;y<Z;y+=step,row++) D.set(band.subarray(row*Z*4,(row+1)*Z*4),y*Z*4);
         if(--left===0){
           if(my!==job) return reject("cancelled");
-          octx.putImageData(id,0,0);
+          out.width=out.height=Z; octx.putImageData(id,0,0);
           out.toBlob(b=>resolve({blob:b,url:URL.createObjectURL(b)}),"image/jpeg",0.93);
         }
       };
-      wk.postMessage(Object.assign({id:my,S,start:k,step:NW},spec));
+      wk.postMessage(Object.assign({id:my,S:Z,start:k,step:NW},spec));
     });
   });
 }
@@ -555,7 +632,8 @@ async function pickTexture(s,salt){
   const feat=b=>{ const m=b.reduce((a,c)=>a+lumOf(c[0],c[1],c[2]),0)/b.length+1; return b.flatMap(c=>c.map(v=>v/m)).concat([m/255*3]); };
   const fu=feat(eyeBands(s));
   const ranked=idx.items.map((it,i)=>({i,d:feat(it.bands).reduce((a,v,k)=>a+(v-fu[k])**2,0)})).sort((a,b)=>a.d-b.d);
-  return loadTexture(idx.items[ranked[Math.abs((s.seed|0)+(salt|0))%3].i].file);
+  const file=idx.items[ranked[Math.abs((s.seed|0)+(salt|0))%3].i].file; s.texFile=file;
+  return loadTexture(file);
 }
 async function loadTexture(file){
   if(libCache[file]) return libCache[file];
@@ -889,7 +967,11 @@ function spaced(g,text,x,y,track){
   chars.forEach((c,i)=>{g.fillText(c,px,y); px+=ws[i]+track;});
 }
 function loadImg(url){return new Promise(r=>{const i=new Image(); i.onload=()=>r(i); i.src=url;});}
-async function makeCard(mainUrl,caption,sources){
+const CFG=Object.assign({siteUrl:"https://iriseye.vercel.app",hd:{},prints:[],adsense:{}},window.IRIS_CONFIG||{});
+const siteHost=CFG.siteUrl.replace(/^https?:\/\//,"").replace(/\/$/,"");
+const isHD=()=>{ try{ return !!localStorage.getItem("iris_hd"); }catch(e){ return false; } };
+async function makeCard(mainUrl,caption,sources,clean){
+  clean=clean===undefined?isHD():clean;
   try{await Promise.all([document.fonts.load("300 36px Inter"),document.fonts.load("300 30px Inter")]);}catch(e){}
   const W=1080,H=1920, c=document.createElement("canvas"); c.width=W; c.height=H;
   const g=c.getContext("2d"); g.fillStyle="#000"; g.fillRect(0,0,W,H);
@@ -901,6 +983,7 @@ async function makeCard(mainUrl,caption,sources){
   g.drawImage(main,(W-920)/2,cyM-460,920,920);
   g.fillStyle="#F2F2F2"; g.font="300 30px Inter, system-ui, sans-serif"; g.textBaseline="alphabetic";
   spaced(g,"IRIS",W/2,wmY,30*0.32);
+  if(!clean){ g.fillStyle="#5D5D63"; g.font="300 24px Inter, system-ui, sans-serif"; g.textAlign="center"; g.fillText(siteHost,W/2,wmY+46); }
   g.fillStyle="#8A8A8F"; g.font="300 36px Inter, system-ui, sans-serif"; g.textAlign="center";
   g.fillText(caption,W/2,capY);
   if(sources){
@@ -927,8 +1010,9 @@ function videoType(){
   for(const t of ["video/mp4;codecs=avc1","video/mp4","video/webm;codecs=vp9","video/webm"]) if(window.MediaRecorder&&MediaRecorder.isTypeSupported(t)) return t;
   return null;
 }
-async function recordCollision(){
+async function recordCollision(clean){
   const type=videoType(); if(!type) return null;
+  clean=clean===undefined?isHD():clean;
   try{await document.fonts.load("300 36px Inter");}catch(e){}
   const W=1080,H=1920, st=document.createElement("canvas"); st.width=W; st.height=H; const g=st.getContext("2d");
   const sq=document.createElement("canvas"); sq.width=sq.height=920; const sg=sq.getContext("2d");
@@ -939,7 +1023,8 @@ async function recordCollision(){
   const draw=t=>{ g.fillStyle="#000"; g.fillRect(0,0,W,H); collisionFrame(sg,920,t,collideImgs); g.drawImage(sq,80,cy-460);
     g.fillStyle="#F2F2F2"; g.font="300 30px Inter, system-ui, sans-serif"; spaced(g,"IRIS",W/2,wmY,30*0.32);
     g.globalAlpha=sstepJ(T_MERGE,T_SETTLE,t); g.fillStyle="#8A8A8F"; g.font="300 36px Inter, system-ui, sans-serif"; g.textAlign="center";
-    g.fillText("two eyes, one picture.",W/2,capY); g.globalAlpha=1; };
+    g.fillText("two eyes, one picture.",W/2,capY); g.globalAlpha=1;
+    if(!clean){ g.fillStyle="#5D5D63"; g.font="300 24px Inter, system-ui, sans-serif"; g.fillText(siteHost,W/2,wmY+46); } };
   draw(0); rec.start(250);
   await new Promise(res=>{ const t0=performance.now(); const f=now=>{ const t=(now-t0)/1000; draw(Math.min(t,total)); if(t<total) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
   rec.stop(); await done;
@@ -958,10 +1043,19 @@ async function openShare(kind){
   img.src=URL.createObjectURL(blob);
   if(kind==="fusion"&&videoType()){
     setSeg("video");
-    if(!fusionVideo){ const vb=await recordCollision(); if(vb) fusionVideo={blob:vb,name:"iris-fusion."+(vb.type.includes("mp4")?"mp4":"webm")}; }
+    const wantClean=isHD();
+    if(!fusionVideo||fusionVideo.clean!==wantClean){ const vb=await recordCollision(wantClean); if(vb) fusionVideo={blob:vb,clean:wantClean,name:"iris-fusion."+(vb.type.includes("mp4")?"mp4":"webm")}; }
     shareItem={image:imgItem,video:fusionVideo};
   }else{ shareItem={image:imgItem,video:null}; setSeg("image"); }
-  showSeg();
+  showSeg(); updateMoney();
+}
+// HD / prints / ads entry points on the share screen
+function updateMoney(){
+  const hd=$("hdBtn"), pr=$("printBtn");
+  const hdOn=isHD()||!!CFG.hd.paymentLink, prOn=(CFG.prints||[]).some(p=>p.link);
+  hd.hidden=!hdOn; pr.hidden=!prOn; $("moneySep").hidden=!(hdOn&&prOn);
+  hd.textContent=isHD()?"Download 4K":"Get HD, no watermark"+(CFG.hd.price?" · "+CFG.hd.price:"");
+  showAd("adSlot");
 }
 let segKind="image";
 function setSeg(k){ segKind=k; document.querySelectorAll("#shareSeg button").forEach(b=>b.classList.toggle("on",b.dataset.kind===k)); }
@@ -984,6 +1078,134 @@ $("shareGo").addEventListener("click",async()=>{
 $("saveGo").addEventListener("click",()=>{ const it=current(); if(it) download(it); });
 $("shareBack").addEventListener("click",()=>{ $("cardVid").pause(); show(shareBack); });
 $("shareSingle").addEventListener("click",()=>openShare("single"));
+
+/* ---------- toast ---------- */
+let toastT=0;
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true,3200); }
+
+/* ---------- keep the current scan on this phone across a payment redirect (IndexedDB, never uploaded) ---------- */
+function idb(){ return new Promise((res,rej)=>{ const r=indexedDB.open("iris",1); r.onupgradeneeded=()=>r.result.createObjectStore("kv"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); }
+async function kvSet(k,v){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction("kv","readwrite"); tx.objectStore("kv").put(v,k); tx.oncomplete=res; tx.onerror=()=>rej(tx.error); }); }
+async function kvGet(k){ const db=await idb(); return new Promise((res,rej)=>{ const tx=db.transaction("kv","readonly"); const q=tx.objectStore("kv").get(k); q.onsuccess=()=>res(q.result); q.onerror=()=>rej(q.error); }); }
+async function saveState(kind){
+  const pack=async s=>({jpg:await new Promise(r=>s.src.toBlob(r,"image/jpeg",0.92)),cx:s.cx,cy:s.cy,R:s.R,pr:s.pr,seed:s.seed,texFile:s.texFile});
+  const list=[await pack(scans[0])]; if(kind==="fusion"&&scans[1]) list.push(await pack(scans[1]));
+  await kvSet("pending",{kind,swap:swapSides,scans:list,at:Date.now()});
+}
+async function restoreState(){
+  const st=await kvGet("pending").catch(()=>null); if(!st) return null;
+  for(let i=0;i<st.scans.length;i++){
+    const o=st.scans[i], bmp=await createImageBitmap(o.jpg);
+    const c=document.createElement("canvas"); c.width=bmp.width; c.height=bmp.height; c.getContext("2d").drawImage(bmp,0,0);
+    setImage(c);
+    scans[i]={src:srcCanvas,img,cx:o.cx,cy:o.cy,R:o.R,pr:o.pr,seed:o.seed,texFile:o.texFile,blob:null,url:null};
+    scans[i].tex=await loadTexture(o.texFile);
+    const r=await renderEye(scans[i]); scans[i].blob=r.blob; scans[i].url=r.url;
+  }
+  swapSides=!!st.swap;
+  if(st.kind==="fusion"&&scans[1]){ fused=await renderFusion(); await prepCollision(); }
+  else { scans[1]=null; const im=$("resImg"); im.src=scans[0].url; im.style.opacity=1; }
+  return st.kind;
+}
+
+/* ---------- paid HD pack (Stripe Payment Link; the payment is checked by /api/verify) ---------- */
+function openHD(){
+  if(isHD()) return downloadHD();
+  const fusion=shareKind==="fusion";
+  $("hdThumb").src=fusion?fused.url:scans[0].url;
+  $("hdList").innerHTML=["4K picture of your iris","No watermark on cards"+(fusion?" and video":""),"Every future scan on this phone"].map(t=>"<li>"+t+"</li>").join("");
+  $("hdBuy").textContent="Unlock"+(CFG.hd.price?" for "+CFG.hd.price:"");
+  show("hdS");
+}
+$("hdBtn").addEventListener("click",openHD);
+$("hdBuy").addEventListener("click",e=>withBusy(e.currentTarget,async()=>{
+  if(!CFG.hd.paymentLink) return toast("Payments aren't set up yet.");
+  await saveState(shareKind);
+  location.href=CFG.hd.paymentLink;
+}));
+async function downloadHD(){
+  toast("Preparing your 4K picture…");
+  const fusion=shareKind==="fusion";
+  const spec=fusion?{A:eye(scans[0]),B:eye(scans[1]),libA:await texFor(scans[0]),libB:await texFor(scans[1]),swap:swapSides,seed:scans[0].seed^scans[1].seed}
+                   :{A:eye(scans[0]),libA:await texFor(scans[0]),seed:scans[0].seed};
+  const r=await render(Object.assign({S:2560},spec));
+  download({blob:r.blob,name:fusion?"iris-fusion-4k.jpg":"iris-4k.jpg"});
+}
+async function verifyPayment(sessionId){
+  try{
+    const r=await fetch("/api/verify?session_id="+encodeURIComponent(sessionId),{cache:"no-store"});
+    if(!r.ok) return false; const j=await r.json(); return !!j.paid;
+  }catch(e){ return false; }
+}
+
+/* ---------- prints and gifts (print-on-demand; the print file is uploaded only when ordering) ---------- */
+function openPrints(){
+  const fusion=shareKind==="fusion";
+  $("printThumb").src=fusion?fused.url:scans[0].url;
+  const box=$("products"); box.innerHTML="";
+  for(const p of (CFG.prints||[]).filter(p=>p.link)){
+    const b=document.createElement("button"); b.className="product";
+    b.innerHTML="<span></span><span></span>"; b.children[0].textContent=p.name; b.children[1].textContent=p.price||"";
+    b.addEventListener("click",()=>withBusy(b,()=>orderPrint(p)));
+    box.appendChild(b);
+  }
+  show("printS");
+}
+$("printBtn").addEventListener("click",openPrints);
+async function orderPrint(p){
+  toast("Preparing your print file…");
+  const fusion=shareKind==="fusion";
+  const spec=fusion?{A:eye(scans[0]),B:eye(scans[1]),libA:await texFor(scans[0]),libB:await texFor(scans[1]),swap:swapSides,seed:scans[0].seed^scans[1].seed}
+                   :{A:eye(scans[0]),libA:await texFor(scans[0]),seed:scans[0].seed};
+  const r=await render(Object.assign({S:2560},spec));
+  let id;
+  try{
+    const up=await fetch("/api/upload?product="+encodeURIComponent(p.id),{method:"POST",headers:{"Content-Type":"application/octet-stream"},body:r.blob});
+    if(!up.ok) throw new Error(up.status); id=(await up.json()).id;
+  }catch(e){ return toast("Couldn't prepare the order. Try again in a moment."); }
+  await saveState(shareKind);
+  const sep=p.link.includes("?")?"&":"?";
+  location.href=p.link+sep+"client_reference_id="+encodeURIComponent(id);
+}
+document.querySelectorAll(".back").forEach(b=>b.addEventListener("click",()=>show("shareS")));
+$("orderBack").addEventListener("click",async e=>{ await withBusy(e.currentTarget,async()=>{ const k=await restoreState(); if(k) await openShare(k); else show("home"); }); });
+
+/* ---------- ads (Google AdSense, only if configured; never during the scan itself, never for HD buyers) ---------- */
+let adsLoaded=false;
+function showAd(slotId){
+  const a=CFG.adsense||{}, box=$(slotId);
+  if(!a.client||!a.slot||isHD()){ box.hidden=true; return; }
+  if(!adsLoaded){ adsLoaded=true; const sc=document.createElement("script"); sc.async=true; sc.crossOrigin="anonymous";
+    sc.src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client="+encodeURIComponent(a.client); document.head.appendChild(sc); }
+  if(!box.dataset.filled){ box.dataset.filled="1"; box.hidden=false;
+    box.innerHTML='<ins class="adsbygoogle" style="display:block" data-ad-format="auto" data-full-width-responsive="true"></ins>';
+    const ins=box.firstChild; ins.dataset.adClient=a.client; ins.dataset.adSlot=a.slot;
+    try{ (window.adsbygoogle=window.adsbygoogle||[]).push({}); }catch(e){} }
+}
+
+/* ---------- growth: send IRIS to a friend ---------- */
+$("invite").addEventListener("click",async()=>{
+  const url=CFG.siteUrl.replace(/\/$/,"")+"/?fuse=1", text="Scan your eye with IRIS and let's fuse them.";
+  try{ if(navigator.share){ await navigator.share({title:"IRIS",text,url}); return; } }catch(e){ if(e&&e.name==="AbortError") return; }
+  try{ await navigator.clipboard.writeText(url); toast("Link copied."); }catch(e){ toast(url); }
+});
+
+/* ---------- coming back from Stripe or from an invite ---------- */
+(async()=>{
+  const q=new URLSearchParams(location.search);
+  if(q.get("fuse")) $("inviteLine").hidden=false;
+  if(q.get("unlock")==="hd"&&q.get("session_id")){
+    history.replaceState(null,"",location.pathname);
+    const paid=await verifyPayment(q.get("session_id"));
+    if(paid){ try{ localStorage.setItem("iris_hd",q.get("session_id")); }catch(e){} }
+    const k=await restoreState();
+    if(k){ await openShare(k); }
+    toast(paid?"HD unlocked. Thank you.":"We couldn't confirm the payment. If you were charged, contact us.");
+  }else if(q.get("order")==="done"){
+    history.replaceState(null,"",location.pathname);
+    show("orderS"); showAd("adSlot2");
+  }
+})();
 $("shareFusion").addEventListener("click",()=>openShare("fusion"));
 
 /* ---------- adjust (fallback when detection misses) ---------- */

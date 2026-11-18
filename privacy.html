@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Privacy — IRIS</title>
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;500&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#000;color:#F2F2F2;font:300 15px/1.6 Inter,system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  main{max-width:600px;margin:0 auto;padding:56px 24px 80px}
+  .wm{display:block;text-align:center;font-size:13px;letter-spacing:.32em;margin-right:-.32em;color:#F2F2F2;text-decoration:none}
+  h1{font-weight:300;font-size:34px;line-height:42px;letter-spacing:-.01em;margin:56px 0 12px}
+  .lead{color:#8A8A8F;margin-bottom:40px}
+  h2{font-weight:500;font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:#8A8A8F;margin:36px 0 10px}
+  p,li{color:#d8d8dc}
+  ul{padding-left:18px;display:flex;flex-direction:column;gap:6px}
+  a{color:#8A8A8F;text-underline-offset:4px}
+  .muted{color:#5D5D63;font-size:12.5px;margin-top:48px}
+</style>
+</head>
+<body>
+<main>
+  <a class="wm" href="/">IRIS</a>
+  <h1>Your eye stays on your phone.</h1>
+  <p class="lead">IRIS turns a photo of your eye into a picture of your iris. All of that happens on your device.</p>
+
+  <h2>What happens to your scan</h2>
+  <ul>
+    <li>The camera feed and your photos are processed in your browser, on your phone. They are not uploaded, stored on a server, or seen by anyone.</li>
+    <li>Finding your iris and drawing the final picture both run on the device (a small model and a renderer shipped with the site).</li>
+    <li>Nothing is kept after you close the page, except in the two cases below.</li>
+  </ul>
+
+  <h2>Kept on your phone only</h2>
+  <ul>
+    <li>If you buy the HD pack or order a print, your current scan is saved in your browser's storage on this phone, so it's still there when you come back from the payment page. It never leaves the phone.</li>
+    <li>If you bought the HD pack, a note that it's unlocked is saved in your browser.</li>
+    <li>You can remove both by clearing this site's data in your browser settings.</li>
+  </ul>
+
+  <h2>When something is sent</h2>
+  <ul>
+    <li><strong>Print and gift orders.</strong> When you order, the finished picture (not your original photo) is uploaded so it can be printed, and kept only as long as needed to make and ship the order.</li>
+    <li><strong>Payments</strong> are handled by Stripe. Stripe receives your payment details, email and, for orders, your shipping address. We don't see your card. See <a href="https://stripe.com/privacy">Stripe's privacy policy</a>.</li>
+    <li><strong>Printing and shipping</strong> are done by a print-on-demand partner, who receives the picture and your shipping address.</li>
+    <li><strong>Sharing</strong> is up to you: pictures and videos go only where you send them with your phone's share sheet.</li>
+  </ul>
+
+  <h2>Hosting and ads</h2>
+  <ul>
+    <li>The site is hosted on Vercel, which keeps standard technical logs (like IP addresses) to run the service.</li>
+    <li>If ads are shown, they come from Google AdSense, only after the scan, never to HD buyers. Google may use cookies; you'll be asked for consent first. See <a href="https://policies.google.com/technologies/ads">how Google uses data for ads</a>.</li>
+  </ul>
+
+  <h2>Your rights</h2>
+  <p>Under the GDPR you can ask what we hold about you, and ask us to delete it (for example a print file). Since scans aren't uploaded, there's usually nothing to delete. Contact us: <a id="contact" href="https://github.com/chaoui-ahmed/iris/issues">github.com/chaoui-ahmed/iris</a>.</p>
+
+  <p class="muted">Iris images can count as biometric data. That's why IRIS is built to process them on your phone and not on a server.</p>
+</main>
+<script src="config.js"></script>
+<script>
+  try{ const c=(window.IRIS_CONFIG||{}).contact; if(c){ const a=document.getElementById("contact"); a.href=c; a.textContent=c.replace(/^mailto:|^https?:\/\//,""); } }catch(e){}
+</script>
+</body>
+</html>

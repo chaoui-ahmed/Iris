@@ -38,6 +38,14 @@ The textures come from the Synthetic Iris Image Dataset (Zhang, Hart, Bi, Fang, 
 
 Scan a second eye and the two irises fly into each other: impact, sparks, shockwave, then one iris where the two halves interlock along a swirling seam. "Share" on that screen exports the collision as a 9:16 video (MP4 where the browser can record it, WebM otherwise) or a still story card.
 
+## Making money
+
+HD pack (Stripe), prints and gifts (print-on-demand), ads (AdSense), growth features and a privacy page are built in. Each one turns on when you fill its part of `config.js`. Setup steps: [MONETIZATION.md](MONETIZATION.md).
+
+## Privacy
+
+Scans are processed on the phone and never uploaded. The only uploads: the finished picture when someone orders a print, and payment details handled by Stripe. Full text: [privacy.html](privacy.html).
+
 ## Run locally
 
 Any static server works (the worker doesn't load from `file://`):
@@ -57,6 +65,9 @@ Vercel: import the repo, framework preset "Other", no build command. That's it.
 - `render-worker.js`: iris unwrapping and rendering
 - `models/`: trained models loaded by the site
 - `lib/iris/`: iris texture library (80 textures + index)
+- `config.js`: payment links, products, ads (public settings)
+- `api/verify.js`, `api/upload.js`: Vercel functions for Stripe checks and print files
+- `privacy.html`, `MONETIZATION.md`, `og.jpg` (link preview)
 - `vendor/ort/`: ONNX Runtime Web
 - `training/`: data generator, training, export, Colab notebook
 - `manifest.webmanifest`, `icon.svg`, `icon-512.png`: installable as a home-screen app
